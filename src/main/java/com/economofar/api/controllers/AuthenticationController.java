@@ -1,5 +1,6 @@
 package com.economofar.api.controllers;
 
+import com.economofar.api.dtos.AuthenticationRequest;
 import com.economofar.api.dtos.AuthenticationResponse;
 import com.economofar.api.dtos.RegisterRequest;
 import com.economofar.api.services.AuthenticationService;
@@ -17,10 +18,19 @@ public class AuthenticationController {
 
     private final AuthenticationService service;
 
+    // Endpoint pour créer un compte
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
             @RequestBody RegisterRequest request
     ) {
         return ResponseEntity.ok(service.register(request));
+    }
+
+    // Endpoint pour se connecter (Login)
+    @PostMapping("/authenticate")
+    public ResponseEntity<AuthenticationResponse> authenticate(
+            @RequestBody AuthenticationRequest request
+    ) {
+        return ResponseEntity.ok(service.authenticate(request));
     }
 }
