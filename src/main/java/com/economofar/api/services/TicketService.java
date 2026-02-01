@@ -15,7 +15,10 @@ public class TicketService {
 
     private final TicketRepository repository;
 
-    // Sauvegarder un ticket pour un utilisateur spécifique
+    /**
+     * Sauvegarder un ticket pour un utilisateur spécifique.
+     * Utilise le Builder de Lombok pour mapper le DTO vers l'entité.
+     */
     public Ticket createTicket(TicketRequest request, User user) {
         var ticket = Ticket.builder()
                 .merchantName(request.getMerchantName())
@@ -23,14 +26,19 @@ public class TicketService {
                 .purchaseDate(request.getPurchaseDate())
                 .category(request.getCategory())
                 .imageUrl(request.getImageUrl())
-                .user(user) // ✅ Association importante !
+                .rawOcrText(request.getRawOcrText()) // ✅ Inclus pour le debug/IA
+                .user(user) // ✅ Association à l'utilisateur connecté
                 .build();
         
         return repository.save(ticket);
     }
 
-    // Récupérer les tickets de l'utilisateur connecté
+    /**
+     * Récupérer les tickets de l'utilisateur connecté.
+     * Utilise l'entité User pour une requête JPA optimisée et triée.
+     */
     public List<Ticket> getMyTickets(User user) {
-        return repository.findAllByUserId(user.getId());
+        // On utilise la méthode de repository qui gère le tri par date
+        return repository.findByUserOrderByPurchaseDateDesc(user);
     }
 }

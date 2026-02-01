@@ -1,5 +1,6 @@
 package com.economofar.api.services;
 
+import com.economofar.api.config.JwtService; // ✅ IMPORTANT : Importe le bon JwtService (celui de config)
 import com.economofar.api.dtos.AuthenticationRequest;
 import com.economofar.api.dtos.AuthenticationResponse;
 import com.economofar.api.dtos.RegisterRequest;
@@ -31,7 +32,7 @@ public class AuthenticationService {
                 .lastName(request.getLastName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword())) // 🔒 On crypte le mot de passe ici !
-                .role(Role.USER) // Par défaut, on crée un simple utilisateur (changer en Role.ADMIN si besoin)
+                .role(Role.USER) // Par défaut, on crée un simple utilisateur
                 .build();
         
         // 2. On sauvegarde en base de données

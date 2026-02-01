@@ -12,23 +12,29 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/tickets")
+@RequestMapping("/api/v1/tickets") // ✅ Best Practice: Versioning your API
 @RequiredArgsConstructor
 public class TicketController {
 
     private final TicketService service;
 
-    // POST : Créer un ticket
-    @PostMapping
+    /**
+     * POST /api/v1/tickets/scan
+     * Used to upload the data extracted from the receipt.
+     */
+    @PostMapping("/scan")
     public ResponseEntity<Ticket> createTicket(
             @RequestBody TicketRequest request,
-            @AuthenticationPrincipal User user // ✨ MAGIE : Spring injecte l'user connecté ici
+            @AuthenticationPrincipal User user // ✨ Spring Security injects the connected user
     ) {
         return ResponseEntity.ok(service.createTicket(request, user));
     }
 
-    // GET : Voir mes tickets
-    @GetMapping
+    /**
+     * GET /api/v1/tickets/history
+     * Used by the Dashboard to retrieve the user's previous scans.
+     */
+    @GetMapping("/history")
     public ResponseEntity<List<Ticket>> getMyTickets(
             @AuthenticationPrincipal User user
     ) {

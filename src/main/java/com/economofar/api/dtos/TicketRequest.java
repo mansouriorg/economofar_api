@@ -16,5 +16,8 @@ public class TicketRequest {
     private BigDecimal totalAmount;
     private LocalDateTime purchaseDate;
     private String category;
-    private String imageUrl; // Optionnel pour l'instant
+    private String imageUrl; 
+    
+    // ✅ Ajouté pour correspondre au modèle Ticket et au Service
+    private String rawOcrText; 
 }
