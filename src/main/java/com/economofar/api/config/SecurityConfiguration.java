@@ -14,14 +14,15 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(AbstractHttpConfigurer::disable) // Désactive la protection CSRF
+            .csrf(AbstractHttpConfigurer::disable) // Désactive la protection CSRF (obligatoire pour les API mobiles)
             .authorizeHttpRequests(auth -> auth
-                // ✅ AUTORISATIONS PUBLIQUES :
-                // 1. /api/auth/** : Pour s'inscrire et se connecter
-                // 2. /uploads/** : Pour afficher les images des tickets
-                .requestMatchers("/api/auth/**", "/uploads/**").permitAll()
+                // ✅ AUTORISATIONS PUBLIQUES (Ouvert à tous) :
+                // 1. /api/auth/** : Pour l'inscription et le login
+                // 2. /uploads/** : Pour que l'iPhone puisse télécharger/afficher l'image après upload
+                // 3. /api/images/** : ⚡️ AJOUTÉ ICI ! Pour permettre l'upload du ticket sans être bloqué
+                .requestMatchers("/api/auth/**", "/uploads/**", "/api/images/**").permitAll()
                 
-                // 🔒 TOUT LE RESTE EST PRIVÉ :
+                // 🔒 TOUT LE RESTE NÉCESSITE UNE CONNEXION :
                 .anyRequest().authenticated()
             );
             
