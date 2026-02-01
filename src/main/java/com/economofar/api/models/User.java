@@ -18,28 +18,34 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "_user")
-public class User implements UserDetails { // ✅ 1. On ajoute "implements UserDetails"
+@Table(name = "_user") // On utilise "_user" car "user" est un mot réservé en SQL (PostgreSQL)
+public class User implements UserDetails {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue(strategy = GenerationType.UUID) // Génère automatiquement un ID unique complexe
     private UUID id;
 
     @Column(unique = true, nullable = false)
     private String email;
 
     private String firstName;
+    
     private String lastName;
+    
     private String password;
 
-    @Enumerated(EnumType.STRING)
+    @Enumerated(EnumType.STRING) // Stocke le rôle sous forme de texte ("ADMIN", "USER") en base
     private Role role;
 
-    // ✅ 2. On ajoute les méthodes obligatoires demandées par Spring Security
+    // --- MÉTHODES OBLIGATOIRES DE SPRING SECURITY (UserDetails) ---
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Transforme le rôle (ADMIN, STAFF) en autorisation Spring
+        // Retourne la liste des permissions. Ici, on transforme l'enum Role en "Autorité"
+        // ex: Si role = ADMIN, l'autorité sera "ADMIN" (ou "ROLE_ADMIN" selon config)
+        if (role == null) {
+            return List.of();
+        }
         return List.of(new SimpleGrantedAuthority(role.name()));
     }
 
@@ -50,7 +56,7 @@ public class User implements UserDetails { // ✅ 1. On ajoute "implements UserD
 
     @Override
     public String getUsername() {
-        return email; // Pour nous, le "nom d'utilisateur" C'EST l'email
+        return email; // L'email sert d'identifiant pour la connexion
     }
 
     @Override
@@ -70,6 +76,6 @@ public class User implements UserDetails { // ✅ 1. On ajoute "implements UserD
 
     @Override
     public boolean isEnabled() {
-        return true; // Le compte est activé
+        return true; // Le compte est activé par défaut
     }
 }

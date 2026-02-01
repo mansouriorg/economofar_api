@@ -18,19 +18,27 @@ public class AuthenticationController {
 
     private final AuthenticationService service;
 
-    // Endpoint pour créer un compte
+    /**
+     * Endpoint d'inscription (Register)
+     * URL : POST http://localhost:8080/api/auth/register
+     */
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
             @RequestBody RegisterRequest request
     ) {
+        // Appelle le service pour créer l'utilisateur et générer le token
         return ResponseEntity.ok(service.register(request));
     }
 
-    // Endpoint pour se connecter (Login)
+    /**
+     * Endpoint de connexion (Login)
+     * URL : POST http://localhost:8080/api/auth/authenticate
+     */
     @PostMapping("/authenticate")
     public ResponseEntity<AuthenticationResponse> authenticate(
             @RequestBody AuthenticationRequest request
     ) {
+        // Appelle le service pour vérifier le mot de passe et récupérer un token
         return ResponseEntity.ok(service.authenticate(request));
     }
 }

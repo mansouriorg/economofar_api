@@ -18,21 +18,26 @@ public class AuthenticationService {
 
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService; // ✅ On utilise le vrai service JWT
-    private final AuthenticationManager authenticationManager; // ✅ Pour le login
+    private final JwtService jwtService; // Le service qui crée les tokens cryptés
+    private final AuthenticationManager authenticationManager; // Le gestionnaire de login de Spring
 
+    /**
+     * Inscription d'un nouvel utilisateur
+     */
     public AuthenticationResponse register(RegisterRequest request) {
+        // 1. On construit l'objet User avec le Builder
         var user = User.builder()
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(Role.STAFF)
+                .password(passwordEncoder.encode(request.getPassword())) // 🔒 On crypte le mot de passe ici !
+                .role(Role.USER) // Par défaut, on crée un simple utilisateur (changer en Role.ADMIN si besoin)
                 .build();
         
+        // 2. On sauvegarde en base de données
         repository.save(user);
         
-        // Génération du vrai token
+        // 3. On génère tout de suite son Token pour qu'il soit connecté directement
         var jwtToken = jwtService.generateToken(user);
         
         return AuthenticationResponse.builder()
@@ -40,8 +45,12 @@ public class AuthenticationService {
                 .build();
     }
 
+    /**
+     * Connexion d'un utilisateur existant
+     */
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        // Cette ligne vérifie si le login/mot de passe sont bons. Sinon, ça lance une erreur.
+        // 1. Authentification via Spring Security
+        // Si le mot de passe est faux, cette méthode va lancer une exception et stopper le code.
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
@@ -49,11 +58,11 @@ public class AuthenticationService {
                 )
         );
         
-        // Si on arrive ici, c'est que le login est bon. On cherche l'user.
+        // 2. Si on arrive ici, c'est que le mot de passe est bon. On récupère l'user en BDD.
         var user = repository.findByEmail(request.getEmail())
-                .orElseThrow();
+                .orElseThrow(); // (Devrait ne jamais arriver car authenticate a réussi)
         
-        // On génère un nouveau token
+        // 3. On génère un nouveau Token frais
         var jwtToken = jwtService.generateToken(user);
         
         return AuthenticationResponse.builder()
