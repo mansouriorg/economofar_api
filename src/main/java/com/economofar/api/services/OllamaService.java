@@ -21,13 +21,15 @@ public class OllamaService {
     private static final String OLLAMA_API_URL = "http://localhost:11434/api/generate";
 
     public String analyzeReceipt(MultipartFile file) {
+        System.out.println("🎬 [OllamaService] Début de l'analyse du ticket...");
+        
         try {
-            // 1. OPTIMISATION IMAGE : Compression et Redimensionnement
-            // MiniCPM-V est puissant, mais on optimise l'image pour la vitesse.
+            // 1. OPTIMISATION IMAGE
+            System.out.println("📸 [OllamaService] Traitement de l'image: " + file.getOriginalFilename() + " (" + file.getSize() + " octets)");
             String base64Image = compressAndEncodeImage(file);
+            System.out.println("✅ [OllamaService] Image optimisée et encodée en Base64.");
 
-            // 2. PROMPT "CHAIN OF THOUGHT" (Chaîne de Pensée) 🧠
-            // On demande à l'IA de décomposer le problème en étapes pour éviter les erreurs.
+            // 2. PROMPT
             String prompt = """
                     You are an advanced OCR assistant using MiniCPM-V.
                     
@@ -54,54 +56,60 @@ public class OllamaService {
                     }
                     """;
 
-            // 3. CONSTRUCTION DE LA REQUÊTE AVEC OPTIONS
+            // 3. CONSTRUCTION DE LA REQUÊTE
             OllamaRequest request = OllamaRequest.builder()
-                    .model("minicpm-v") // ✅ Modèle spécialisé OCR
+                    .model("minicpm-v")
                     .prompt(prompt)
                     .stream(false)
                     .images(List.of(base64Image))
-                    // 🔥 OPTIONS CRITIQUES :
                     .options(Map.of(
-                            "temperature", 0.0,  // 0 = Strictement factuel
-                            "num_predict", 2000  // Autorise une réponse longue (car elle inclut l'étape 1)
+                            "temperature", 0.0,
+                            "num_predict", 2000
                     ))
                     .build();
 
             // 4. ENVOI
+            System.out.println("📡 [OllamaService] Envoi de la requête à Ollama (cela peut prendre du temps si le modèle doit charger)...");
+            long startTime = System.currentTimeMillis();
+            
             RestTemplate restTemplate = new RestTemplate();
             OllamaResponse response = restTemplate.postForObject(OLLAMA_API_URL, request, OllamaResponse.class);
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("⏱️ [OllamaService] Réponse reçue d'Ollama en " + (endTime - startTime) / 1000 + " secondes.");
 
             // 5. NETTOYAGE CHIRURGICAL DU JSON
-            // L'IA va répondre "Step 1: I see bread... Step 2: Here is the JSON...".
-            // Ce code ignore tout le blabla et ne garde que ce qui est entre { et }.
             if (response != null && response.getResponse() != null) {
                 String rawResponse = response.getResponse();
+                System.out.println("📝 [OllamaService] Réponse brute de l'IA: " + rawResponse);
                 
                 int firstBrace = rawResponse.indexOf("{");
                 int lastBrace = rawResponse.lastIndexOf("}");
 
                 if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
-                    return rawResponse.substring(firstBrace, lastBrace + 1);
+                    String cleanJson = rawResponse.substring(firstBrace, lastBrace + 1);
+                    System.out.println("💎 [OllamaService] JSON extrait avec succès: " + cleanJson);
+                    return cleanJson;
                 } else {
-                    System.err.println("ERREUR IA (Pas de JSON trouvé) : " + rawResponse);
-                    return "{}"; 
+                    System.err.println("❌ [OllamaService] Erreur: Aucun bloc JSON { } trouvé dans la réponse de l'IA.");
+                    return "{\"error\": \"No JSON found in AI response\"}"; 
                 }
             }
             
-            return "{}";
+            System.err.println("❌ [OllamaService] Erreur: La réponse d'Ollama est null.");
+            return "{\"error\": \"Null response from Ollama\"}";
 
-        } catch (IOException e) {
-            throw new RuntimeException("Erreur lors du traitement de l'image", e);
+        } catch (Exception e) {
+            System.err.println("💥 [OllamaService] Erreur critique lors de l'analyse: " + e.getMessage());
+            e.printStackTrace();
+            return "{\"error\": \"" + e.getMessage() + "\"}";
         }
     }
 
-    /**
-     * Méthode utilitaire pour redimensionner l'image avant l'envoi.
-     * Convertit en JPG et réduit la largeur à 1024px max.
-     */
     private String compressAndEncodeImage(MultipartFile file) throws IOException {
         BufferedImage originalImage = ImageIO.read(file.getInputStream());
         if (originalImage == null) {
+            System.err.println("⚠️ [OllamaService] Impossible de lire le flux d'image, envoi du fichier brut.");
             return Base64.getEncoder().encodeToString(file.getBytes());
         }
 
@@ -109,11 +117,13 @@ public class OllamaService {
         int originalWidth = originalImage.getWidth();
         
         if (originalWidth <= targetWidth) {
+            System.out.println("ℹ️ [OllamaService] Image déjà petite, encodage direct.");
             return Base64.getEncoder().encodeToString(file.getBytes());
         }
 
         int newWidth = targetWidth;
         int newHeight = (int) (originalImage.getHeight() * ((double) newWidth / originalWidth));
+        System.out.println("📏 [OllamaService] Redimensionnement de " + originalWidth + "px à " + newWidth + "px.");
 
         BufferedImage resizedImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = resizedImage.createGraphics();
