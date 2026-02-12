@@ -12,12 +12,20 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class TicketRequest {
+    
     private String merchantName;
+    
     private BigDecimal totalAmount;
+    
+    /**
+     * Note: Assure-toi que le format envoyé par Swift ou parsé du JSON d'Ollama
+     * est compatible avec ISO_LOCAL_DATE_TIME (ex: 2026-02-12T16:54:00)
+     */
     private LocalDateTime purchaseDate;
+    
     private String category;
+    
     private String imageUrl; 
     
-    // ✅ Ajouté pour correspondre au modèle Ticket et au Service
     private String rawOcrText; 
 }

@@ -4,56 +4,69 @@ import com.economofar.api.dtos.TicketRequest;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.services.TicketService;
-import com.economofar.api.services.OllamaService; // ✅ Ajoute l'import
+import com.economofar.api.services.OllamaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile; // ✅ Ajoute l'import
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/tickets")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*") // Nécessaire pour les appels depuis l'iPhone (CORS)
 public class TicketController {
 
     private final TicketService service;
-    private final OllamaService ollamaService; // ✅ Injecte ton service Ollama
+    private final OllamaService ollamaService;
 
     /**
-     * POST /api/v1/tickets/upload
-     * C'est ici que l'iPhone envoie l'image brute.
+     * ÉTAPE 1 : ANALYSE
+     * Envoie l'image à Ollama et renvoie le JSON à l'iPhone pour validation.
      */
     @PostMapping("/upload")
     public ResponseEntity<String> uploadTicket(
-            @RequestParam("file") MultipartFile file, // 👈 Capture le fichier "multipart" de Swift
+            @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal User user
     ) {
-        // 1. On envoie l'image à Ollama (minicpm-v) pour analyse
+        System.out.println("📬 [TicketController] Analyse demandée par : " + user.getEmail());
+        
+        // Appel au service Ollama pour l'OCR et l'extraction
         String jsonResult = ollamaService.analyzeReceipt(file);
         
-        // 2. On renvoie le JSON extrait par l'IA à l'iPhone
-        // L'iPhone affichera ce JSON dans la ResultView pour validation
         return ResponseEntity.ok(jsonResult);
     }
 
     /**
-     * POST /api/v1/tickets/scan
-     * Appelé quand l'utilisateur valide les données sur son téléphone pour les enregistrer en BDD.
+     * ÉTAPE 2 : SAUVEGARDE
+     * Enregistre les données validées par l'utilisateur en base de données.
      */
     @PostMapping("/scan")
     public ResponseEntity<Ticket> createTicket(
             @RequestBody TicketRequest request,
             @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(service.createTicket(request, user));
+        // Log de debug pour vérifier si les données arrivent bien du mobile
+        System.out.println("💾 [TicketController] Tentative de sauvegarde pour : " + user.getEmail());
+        System.out.println("📦 Data: " + request.getMerchantName() + " | Montant: " + request.getTotalAmount());
+
+        Ticket createdTicket = service.createTicket(request, user);
+        
+        return ResponseEntity.ok(createdTicket);
     }
 
+    /**
+     * ÉTAPE 3 : HISTORIQUE
+     * Renvoie tous les tickets de l'utilisateur connecté.
+     */
     @GetMapping("/history")
     public ResponseEntity<List<Ticket>> getMyTickets(
             @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(service.getMyTickets(user));
+        System.out.println("📜 [TicketController] Chargement de l'historique pour : " + user.getEmail());
+        List<Ticket> history = service.getMyTickets(user);
+        return ResponseEntity.ok(history);
     }
 }

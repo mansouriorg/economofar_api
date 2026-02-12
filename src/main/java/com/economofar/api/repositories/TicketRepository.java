@@ -12,14 +12,20 @@ import java.util.UUID;
 public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
     /**
-     * Finds all tickets belonging to a specific user and sorts them 
-     * by purchase date so the newest scans appear first on the dashboard.
+     * Récupère tous les tickets d'un utilisateur spécifique.
+     * Trié par date d'achat décroissante (du plus récent au plus ancien).
+     * Utile quand vous avez l'objet User complet depuis le contexte de sécurité.
      */
     List<Ticket> findByUserOrderByPurchaseDateDesc(User user);
 
     /**
-     * Alternative: If you prefer to query specifically by the UUID of the user.
-     * Note: Ensure the field name in Ticket.java is 'user'.
+     * Récupère tous les tickets via l'ID de l'utilisateur.
+     * Hibernate va automatiquement faire la jointure sur la colonne 'user_id'.
      */
     List<Ticket> findAllByUserIdOrderByPurchaseDateDesc(UUID userId);
+    
+    /**
+     * Optionnel : Permet de compter le nombre de tickets d'un utilisateur
+     */
+    long countByUserId(UUID userId);
 }

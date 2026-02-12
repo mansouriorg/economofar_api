@@ -1,5 +1,6 @@
 package com.economofar.api.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,7 +15,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "ticket")
+@Table(name = "tickets") // "tickets" est souvent préférable car "ticket" peut être un mot réservé
 public class Ticket {
 
     @Id
@@ -24,9 +25,11 @@ public class Ticket {
     // L'URL de l'image (stockée plus tard sur un cloud ou dossier local)
     private String imageUrl;
 
+    @Column(nullable = false)
     private String merchantName; // Nom du magasin (ex: Carrefour)
     
-    private BigDecimal totalAmount; // Montant (ex: 12.50)
+    @Column(precision = 10, scale = 2)
+    private BigDecimal totalAmount; // Montant avec précision monétaire
 
     private LocalDateTime purchaseDate; // Date de l'achat
 
@@ -35,8 +38,24 @@ public class Ticket {
     @Column(columnDefinition = "TEXT")
     private String rawOcrText; // Le texte brut extrait par l'IA (pour debug)
 
-    // Un ticket appartient à UN utilisateur
+    /**
+     * Un ticket appartient à UN utilisateur.
+     * @JsonIgnore est CRUCIAL ici : cela empêche Spring de charger l'utilisateur entier 
+     * à chaque fois que tu récupères un ticket (évite la boucle infinie JSON).
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore 
     private User user;
+
+    /**
+     * Méthode d'aide pour s'assurer que la date de création 
+     * est remplie si l'IA ne la trouve pas.
+     */
+    @PrePersist
+    protected void onCreate() {
+        if (purchaseDate == null) {
+            purchaseDate = LocalDateTime.now();
+        }
+    }
 }
