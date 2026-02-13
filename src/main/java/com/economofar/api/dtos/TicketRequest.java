@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -15,13 +14,15 @@ public class TicketRequest {
     
     private String merchantName;
     
+    // BigDecimal is better for money, Jackson handles the conversion from Double automatically
     private BigDecimal totalAmount;
     
     /**
-     * Note: Assure-toi que le format envoyé par Swift ou parsé du JSON d'Ollama
-     * est compatible avec ISO_LOCAL_DATE_TIME (ex: 2026-02-12T16:54:00)
+     * ✅ CHANGED TO STRING
+     * We receive the date as a String from Swift (ISO8601).
+     * We will parse this into LocalDateTime in the TicketService.
      */
-    private LocalDateTime purchaseDate;
+    private String purchaseDate;
     
     private String category;
     
