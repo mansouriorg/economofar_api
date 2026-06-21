@@ -1,12 +1,15 @@
 package com.economofar.api.repositories;
 
+import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -15,14 +18,17 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     /**
      * Récupère tous les tickets d'un utilisateur spécifique.
      * Trié par date d'achat décroissante, du plus récent au plus ancien.
-     * Utile quand vous avez l'objet User complet depuis le contexte de sécurité.
+     *
+     * EntityGraph charge aussi les items pour éviter les problèmes Lazy loading
+     * quand le frontend demande les tickets avec leurs articles.
      */
+    @EntityGraph(attributePaths = "items")
     List<Ticket> findByUserOrderByPurchaseDateDesc(User user);
 
     /**
      * Récupère tous les tickets via l'ID de l'utilisateur.
-     * Hibernate va automatiquement faire la jointure sur la colonne user_id.
      */
+    @EntityGraph(attributePaths = "items")
     List<Ticket> findAllByUserIdOrderByPurchaseDateDesc(UUID userId);
 
     /**
@@ -31,15 +37,26 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     long countByUserId(UUID userId);
 
     /**
+     * Récupère un ticket spécifique appartenant à un utilisateur.
+     * Utilisé pour éviter qu'un utilisateur puisse accéder au ticket d'un autre utilisateur.
+     *
+     * EntityGraph charge aussi les items éditables du ticket.
+     */
+    @EntityGraph(attributePaths = "items")
+    Optional<Ticket> findByIdAndUser(UUID id, User user);
+
+    /**
      * Récupère les 5 tickets les plus récents d'un utilisateur.
      * Utilisé pour afficher les tickets récents dans le dashboard.
      */
+    @EntityGraph(attributePaths = "items")
     List<Ticket> findTop5ByUserOrderByPurchaseDateDesc(User user);
 
     /**
      * Récupère le ticket le plus récent d'un utilisateur.
      * Utilisé pour la smart card "Last scan status".
      */
+    @EntityGraph(attributePaths = "items")
     Ticket findTopByUserOrderByPurchaseDateDesc(User user);
 
     /**
@@ -54,7 +71,6 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
     /**
      * Même recherche, mais directement avec l'ID de l'utilisateur.
-     * Utile si vous avez seulement l'UUID de l'utilisateur.
      */
     List<Ticket> findAllByUserIdAndPurchaseDateBetween(
             UUID userId,
@@ -77,5 +93,36 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     List<Ticket> findAllByUserIdAndPurchaseDateAfterOrderByPurchaseDateDesc(
             UUID userId,
             LocalDateTime since
+    );
+
+    /**
+     * Récupère les tickets d'un utilisateur selon leur statut de scan.
+     * Utile pour afficher les tickets en cours d'analyse, en échec ou en attente de validation.
+     */
+    @EntityGraph(attributePaths = "items")
+    List<Ticket> findByUserAndScanStatusOrderByScanStartedAtDesc(
+            User user,
+            ScanStatus scanStatus
+    );
+
+    /**
+     * Récupère les tickets dont le statut est dans une liste donnée.
+     * Utile pour suivre plusieurs états en même temps :
+     * UPLOADING, ANALYZING, OCR_COMPLETED, NEEDS_REVIEW, FAILED.
+     */
+    @EntityGraph(attributePaths = "items")
+    List<Ticket> findByUserAndScanStatusInOrderByScanStartedAtDesc(
+            User user,
+            List<ScanStatus> scanStatuses
+    );
+
+    /**
+     * Récupère le dernier ticket en cours de scan ou de validation.
+     * Utile côté frontend pour restaurer un scan interrompu.
+     */
+    @EntityGraph(attributePaths = "items")
+    Optional<Ticket> findTopByUserAndScanStatusInOrderByScanStartedAtDesc(
+            User user,
+            List<ScanStatus> scanStatuses
     );
 }
