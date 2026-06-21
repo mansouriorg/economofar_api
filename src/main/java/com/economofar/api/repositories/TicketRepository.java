@@ -31,6 +31,12 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     long countByUserId(UUID userId);
 
     /**
+     * Récupère les 5 tickets les plus récents d'un utilisateur.
+     * Utilisé pour afficher les tickets récents dans le dashboard.
+     */
+    List<Ticket> findTop5ByUserOrderByPurchaseDateDesc(User user);
+
+    /**
      * Récupère les tickets d'un utilisateur entre deux dates d'achat.
      * Utilisé pour les résumés hebdomadaires, mensuels, le budget et les dépenses inhabituelles.
      */
