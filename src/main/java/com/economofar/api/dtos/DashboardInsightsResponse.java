@@ -1,6 +1,7 @@
 package com.economofar.api.dtos;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class DashboardInsightsResponse {
@@ -20,7 +21,22 @@ public class DashboardInsightsResponse {
     private BigDecimal averageTicketAmount;
     private String mostFrequentMerchant;
 
+    /**
+     * Smart cards fields.
+     */
+    private BigDecimal monthlyBudget;
+    private BigDecimal budgetRemaining;
+    private boolean budgetExceeded;
+
+    private String lastScanStatus;
+    private String lastScanMerchant;
+    private BigDecimal lastScanAmount;
+    private LocalDateTime lastScanDate;
+
     private List<DashboardRecentTicketResponse> recentTickets;
+
+    public DashboardInsightsResponse() {
+    }
 
     public DashboardInsightsResponse(
             BigDecimal totalScannedAmount,
@@ -34,6 +50,13 @@ public class DashboardInsightsResponse {
             String highestReceiptMerchant,
             BigDecimal averageTicketAmount,
             String mostFrequentMerchant,
+            BigDecimal monthlyBudget,
+            BigDecimal budgetRemaining,
+            boolean budgetExceeded,
+            String lastScanStatus,
+            String lastScanMerchant,
+            BigDecimal lastScanAmount,
+            LocalDateTime lastScanDate,
             List<DashboardRecentTicketResponse> recentTickets
     ) {
         this.totalScannedAmount = totalScannedAmount;
@@ -47,6 +70,13 @@ public class DashboardInsightsResponse {
         this.highestReceiptMerchant = highestReceiptMerchant;
         this.averageTicketAmount = averageTicketAmount;
         this.mostFrequentMerchant = mostFrequentMerchant;
+        this.monthlyBudget = monthlyBudget;
+        this.budgetRemaining = budgetRemaining;
+        this.budgetExceeded = budgetExceeded;
+        this.lastScanStatus = lastScanStatus;
+        this.lastScanMerchant = lastScanMerchant;
+        this.lastScanAmount = lastScanAmount;
+        this.lastScanDate = lastScanDate;
         this.recentTickets = recentTickets;
     }
 
@@ -92,6 +122,34 @@ public class DashboardInsightsResponse {
 
     public String getMostFrequentMerchant() {
         return mostFrequentMerchant;
+    }
+
+    public BigDecimal getMonthlyBudget() {
+        return monthlyBudget;
+    }
+
+    public BigDecimal getBudgetRemaining() {
+        return budgetRemaining;
+    }
+
+    public boolean isBudgetExceeded() {
+        return budgetExceeded;
+    }
+
+    public String getLastScanStatus() {
+        return lastScanStatus;
+    }
+
+    public String getLastScanMerchant() {
+        return lastScanMerchant;
+    }
+
+    public BigDecimal getLastScanAmount() {
+        return lastScanAmount;
+    }
+
+    public LocalDateTime getLastScanDate() {
+        return lastScanDate;
     }
 
     public List<DashboardRecentTicketResponse> getRecentTickets() {

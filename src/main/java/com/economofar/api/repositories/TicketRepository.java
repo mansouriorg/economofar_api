@@ -37,6 +37,12 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     List<Ticket> findTop5ByUserOrderByPurchaseDateDesc(User user);
 
     /**
+     * Récupère le ticket le plus récent d'un utilisateur.
+     * Utilisé pour la smart card "Last scan status".
+     */
+    Ticket findTopByUserOrderByPurchaseDateDesc(User user);
+
+    /**
      * Récupère les tickets d'un utilisateur entre deux dates d'achat.
      * Utilisé pour les résumés hebdomadaires, mensuels, le budget et les dépenses inhabituelles.
      */

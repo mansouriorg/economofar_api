@@ -4,7 +4,9 @@ import com.economofar.api.dtos.DashboardInsightsResponse;
 import com.economofar.api.dtos.DashboardRecentTicketResponse;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
+import com.economofar.api.models.UserBudget;
 import com.economofar.api.repositories.TicketRepository;
+import com.economofar.api.repositories.UserBudgetRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -22,9 +24,14 @@ import java.util.Objects;
 public class DashboardInsightService {
 
     private final TicketRepository ticketRepository;
+    private final UserBudgetRepository userBudgetRepository;
 
-    public DashboardInsightService(TicketRepository ticketRepository) {
+    public DashboardInsightService(
+            TicketRepository ticketRepository,
+            UserBudgetRepository userBudgetRepository
+    ) {
         this.ticketRepository = ticketRepository;
+        this.userBudgetRepository = userBudgetRepository;
     }
 
     public DashboardInsightsResponse getInsights(User user) {
@@ -67,6 +74,8 @@ public class DashboardInsightService {
 
         List<Ticket> recentTickets = ticketRepository.findTop5ByUserOrderByPurchaseDateDesc(user);
 
+        Ticket lastTicket = ticketRepository.findTopByUserOrderByPurchaseDateDesc(user);
+
         BigDecimal totalScannedAmount = calculateTotal(allTickets);
         long ticketCount = allTickets.size();
 
@@ -85,13 +94,20 @@ public class DashboardInsightService {
 
         BigDecimal highestReceiptAmount = highestTicket != null && highestTicket.getTotalAmount() != null
                 ? normalizeAmount(highestTicket.getTotalAmount())
-                : BigDecimal.ZERO;
+                : zeroAmount();
 
         String highestReceiptMerchant = highestTicket != null
                 ? safeMerchantName(highestTicket.getMerchantName())
                 : null;
 
         String mostFrequentMerchant = findMostFrequentMerchant(allTickets);
+
+        BudgetSmartCardResult budgetSmartCard = calculateBudgetSmartCard(
+                user,
+                totalSpentThisMonth
+        );
+
+        LastScanSmartCardResult lastScanSmartCard = calculateLastScanSmartCard(lastTicket);
 
         List<DashboardRecentTicketResponse> recentTicketResponses = recentTickets
                 .stream()
@@ -110,7 +126,61 @@ public class DashboardInsightService {
                 highestReceiptMerchant,
                 normalizeAmount(averageBasket),
                 mostFrequentMerchant,
+                budgetSmartCard.monthlyBudget(),
+                budgetSmartCard.budgetRemaining(),
+                budgetSmartCard.budgetExceeded(),
+                lastScanSmartCard.status(),
+                lastScanSmartCard.merchant(),
+                lastScanSmartCard.amount(),
+                lastScanSmartCard.date(),
                 recentTicketResponses
+        );
+    }
+
+    private BudgetSmartCardResult calculateBudgetSmartCard(
+            User user,
+            BigDecimal totalSpentThisMonth
+    ) {
+        UserBudget budget = userBudgetRepository.findByUser(user).orElse(null);
+
+        if (budget == null || budget.getMonthlyAmount() == null) {
+            return new BudgetSmartCardResult(
+                    zeroAmount(),
+                    zeroAmount(),
+                    false
+            );
+        }
+
+        BigDecimal monthlyBudget = toBigDecimal(budget.getMonthlyAmount());
+        BigDecimal normalizedSpent = totalSpentThisMonth != null
+                ? totalSpentThisMonth
+                : BigDecimal.ZERO;
+
+        BigDecimal budgetRemaining = monthlyBudget.subtract(normalizedSpent);
+        boolean budgetExceeded = budgetRemaining.compareTo(BigDecimal.ZERO) < 0;
+
+        return new BudgetSmartCardResult(
+                normalizeAmount(monthlyBudget),
+                normalizeAmount(budgetRemaining),
+                budgetExceeded
+        );
+    }
+
+    private LastScanSmartCardResult calculateLastScanSmartCard(Ticket lastTicket) {
+        if (lastTicket == null) {
+            return new LastScanSmartCardResult(
+                    "READY_TO_SCAN",
+                    null,
+                    zeroAmount(),
+                    null
+            );
+        }
+
+        return new LastScanSmartCardResult(
+                "COMPLETED",
+                safeMerchantName(lastTicket.getMerchantName()),
+                normalizeAmount(lastTicket.getTotalAmount()),
+                lastTicket.getPurchaseDate()
         );
     }
 
@@ -212,9 +282,52 @@ public class DashboardInsightService {
 
     private BigDecimal normalizeAmount(BigDecimal amount) {
         if (amount == null) {
-            return BigDecimal.ZERO;
+            return zeroAmount();
         }
 
         return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal zeroAmount() {
+        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+
+        if (value instanceof BigDecimal bigDecimalValue) {
+            return bigDecimalValue;
+        }
+
+        if (value instanceof Number numberValue) {
+            return BigDecimal.valueOf(numberValue.doubleValue());
+        }
+
+        if (value instanceof String stringValue) {
+            try {
+                return new BigDecimal(stringValue.replace(",", ".").trim());
+            } catch (NumberFormatException exception) {
+                return BigDecimal.ZERO;
+            }
+        }
+
+        return BigDecimal.ZERO;
+    }
+
+    private record BudgetSmartCardResult(
+            BigDecimal monthlyBudget,
+            BigDecimal budgetRemaining,
+            boolean budgetExceeded
+    ) {
+    }
+
+    private record LastScanSmartCardResult(
+            String status,
+            String merchant,
+            BigDecimal amount,
+            LocalDateTime date
+    ) {
     }
 }

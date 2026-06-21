@@ -15,17 +15,38 @@ public class DashboardRecentTicketResponse {
     private String category;
     private String imageUrl;
 
+    public DashboardRecentTicketResponse() {
+    }
+
+    public DashboardRecentTicketResponse(
+            UUID id,
+            String merchantName,
+            BigDecimal totalAmount,
+            LocalDateTime purchaseDate,
+            String category,
+            String imageUrl
+    ) {
+        this.id = id;
+        this.merchantName = merchantName;
+        this.totalAmount = totalAmount;
+        this.purchaseDate = purchaseDate;
+        this.category = category;
+        this.imageUrl = imageUrl;
+    }
+
     public static DashboardRecentTicketResponse fromTicket(Ticket ticket) {
-        DashboardRecentTicketResponse response = new DashboardRecentTicketResponse();
+        if (ticket == null) {
+            return new DashboardRecentTicketResponse();
+        }
 
-        response.id = ticket.getId();
-        response.merchantName = ticket.getMerchantName();
-        response.totalAmount = ticket.getTotalAmount();
-        response.purchaseDate = ticket.getPurchaseDate();
-        response.category = ticket.getCategory();
-        response.imageUrl = ticket.getImageUrl();
-
-        return response;
+        return new DashboardRecentTicketResponse(
+                ticket.getId(),
+                ticket.getMerchantName(),
+                ticket.getTotalAmount(),
+                ticket.getPurchaseDate(),
+                ticket.getCategory(),
+                ticket.getImageUrl()
+        );
     }
 
     public UUID getId() {
