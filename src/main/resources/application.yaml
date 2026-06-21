@@ -14,3 +14,10 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  
+economofar:
+  support:
+    email: support@economofar.com
+    terms-url: https://economofar.com/terms
+    privacy-url: https://economofar.com/privacy
+    status-url: https://status.economofar.com
