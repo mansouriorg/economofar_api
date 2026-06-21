@@ -38,11 +38,12 @@ public class TicketService {
     /**
      * Saves the validated ticket after the user reviews the OCR result.
      *
-     * This now supports editable extracted data:
+     * This supports editable extracted data:
      * - merchant
      * - date
      * - total
      * - category
+     * - payment method
      * - editable items
      */
     @Transactional
@@ -58,6 +59,7 @@ public class TicketService {
         LocalDateTime parsedDate = parsePurchaseDate(request.getPurchaseDate());
         String validImageUrl = getValidImageUrl(request.getImageUrl());
         String merchantName = getValidMerchantName(request.getMerchantName());
+        String paymentMethod = getValidPaymentMethod(request.getPaymentMethod());
 
         List<TicketItem> extractedItems = buildItems(request.getItems());
 
@@ -72,6 +74,7 @@ public class TicketService {
                 .totalAmount(totalAmount)
                 .purchaseDate(parsedDate)
                 .category(request.getCategory())
+                .paymentMethod(paymentMethod)
                 .imageUrl(validImageUrl)
                 .rawOcrText(request.getRawOcrText())
                 .user(user)
@@ -129,6 +132,7 @@ public class TicketService {
      * - edit date
      * - edit total
      * - change category
+     * - change payment method
      * - replace/edit all items
      */
     @Transactional
@@ -156,6 +160,10 @@ public class TicketService {
 
         if (request.getCategory() != null) {
             ticket.setCategory(request.getCategory());
+        }
+
+        if (request.getPaymentMethod() != null) {
+            ticket.setPaymentMethod(getValidPaymentMethod(request.getPaymentMethod()));
         }
 
         if (request.getRawOcrText() != null) {
@@ -515,7 +523,7 @@ public class TicketService {
      */
     private String getValidImageUrl(String imageUrl) {
         if (imageUrl != null && !imageUrl.isBlank()) {
-            return imageUrl;
+            return imageUrl.trim();
         }
 
         return "placeholder.jpg";
@@ -530,6 +538,20 @@ public class TicketService {
         }
 
         return "Commerçant inconnu";
+    }
+
+    /**
+     * Normalise paymentMethod.
+     *
+     * If payment method is empty, we store null.
+     * This makes history filtering cleaner.
+     */
+    private String getValidPaymentMethod(String paymentMethod) {
+        if (paymentMethod != null && !paymentMethod.isBlank()) {
+            return paymentMethod.trim();
+        }
+
+        return null;
     }
 
     /**

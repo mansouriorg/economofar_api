@@ -2,6 +2,8 @@ package com.economofar.api.controllers;
 
 import com.economofar.api.dtos.TicketEditableRequest;
 import com.economofar.api.dtos.TicketEditableResponse;
+import com.economofar.api.dtos.TicketHistoryGroupResponse;
+import com.economofar.api.dtos.TicketHistoryResponse;
 import com.economofar.api.dtos.TicketItemRequest;
 import com.economofar.api.dtos.TicketItemResponse;
 import com.economofar.api.dtos.TicketRequest;
@@ -11,6 +13,7 @@ import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.repositories.TicketRepository;
 import com.economofar.api.services.OllamaService;
+import com.economofar.api.services.TicketHistoryService;
 import com.economofar.api.services.TicketScanStatusService;
 import com.economofar.api.services.TicketService;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,6 +41,7 @@ public class TicketController {
     private final OllamaService ollamaService;
     private final TicketRepository ticketRepository;
     private final TicketScanStatusService ticketScanStatusService;
+    private final TicketHistoryService ticketHistoryService;
 
     /**
      * ÉTAPE 1 : UPLOAD + OCR ANALYSIS
@@ -133,6 +138,7 @@ public class TicketController {
      * - date
      * - total
      * - category
+     * - payment method
      * - raw OCR text
      * - editable extracted items
      */
@@ -158,6 +164,7 @@ public class TicketController {
         System.out.println("   - Montant: " + request.getTotalAmount());
         System.out.println("   - Date: " + request.getPurchaseDate());
         System.out.println("   - Catégorie: " + request.getCategory());
+        System.out.println("   - Moyen de paiement: " + request.getPaymentMethod());
         System.out.println("   - Items: " + (request.getItems() != null ? request.getItems().size() : 0));
 
         try {
@@ -179,9 +186,11 @@ public class TicketController {
     }
 
     /**
-     * ÉTAPE 3 : HISTORY
+     * ÉTAPE 3 : BASIC HISTORY
      *
-     * Récupère la liste des tickets de l'utilisateur connecté.
+     * Récupère la liste simple des tickets de l'utilisateur connecté.
+     *
+     * GET /api/v1/tickets/history
      */
     @GetMapping("/history")
     public ResponseEntity<List<Ticket>> getMyTickets(
@@ -189,11 +198,149 @@ public class TicketController {
     ) {
         User authenticatedUser = requireAuthenticatedUser(user);
 
-        System.out.println("📜 [TicketController] Chargement historique pour : " + authenticatedUser.getEmail());
+        System.out.println("📜 [TicketController] Chargement historique simple pour : " + authenticatedUser.getEmail());
 
         List<Ticket> history = service.getMyTickets(authenticatedUser);
 
         return ResponseEntity.ok(history);
+    }
+
+    /**
+     * ÉTAPE 3.1 : ADVANCED HISTORY SEARCH
+     *
+     * Filters:
+     * - fromDate: yyyy-MM-dd
+     * - toDate: yyyy-MM-dd
+     * - merchant
+     * - minAmount
+     * - maxAmount
+     * - category
+     * - paymentMethod
+     * - month: yyyy-MM
+     * - scanStatus
+     *
+     * Sorting:
+     * - NEWEST_FIRST
+     * - OLDEST_FIRST
+     * - HIGHEST_AMOUNT
+     * - LOWEST_AMOUNT
+     * - MERCHANT_NAME
+     *
+     * Examples:
+     * GET /api/v1/tickets/history/search?month=2026-06
+     * GET /api/v1/tickets/history/search?merchant=Carrefour
+     * GET /api/v1/tickets/history/search?minAmount=20&maxAmount=100
+     * GET /api/v1/tickets/history/search?category=Alimentation
+     * GET /api/v1/tickets/history/search?paymentMethod=Carte
+     * GET /api/v1/tickets/history/search?scanStatus=SAVED
+     * GET /api/v1/tickets/history/search?sortBy=HIGHEST_AMOUNT
+     */
+    @GetMapping("/history/search")
+    public ResponseEntity<List<TicketHistoryResponse>> searchHistory(
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String merchant,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String paymentMethod,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String scanStatus,
+            @RequestParam(required = false, defaultValue = "NEWEST_FIRST") String sortBy,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        System.out.println("🔎 [TicketController] Recherche historique avancée pour : " + authenticatedUser.getEmail());
+        System.out.println("   - fromDate: " + fromDate);
+        System.out.println("   - toDate: " + toDate);
+        System.out.println("   - merchant: " + merchant);
+        System.out.println("   - minAmount: " + minAmount);
+        System.out.println("   - maxAmount: " + maxAmount);
+        System.out.println("   - category: " + category);
+        System.out.println("   - paymentMethod: " + paymentMethod);
+        System.out.println("   - month: " + month);
+        System.out.println("   - scanStatus: " + scanStatus);
+        System.out.println("   - sortBy: " + sortBy);
+
+        List<TicketHistoryResponse> response = ticketHistoryService.searchHistory(
+                authenticatedUser,
+                fromDate,
+                toDate,
+                merchant,
+                minAmount,
+                maxAmount,
+                category,
+                paymentMethod,
+                month,
+                scanStatus,
+                sortBy
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ÉTAPE 3.2 : GROUPED HISTORY
+     *
+     * Grouping:
+     * - MONTH
+     * - MERCHANT
+     *
+     * Supports the same filters and sorting as advanced history search.
+     *
+     * Examples:
+     * GET /api/v1/tickets/history/grouped?groupBy=MONTH
+     * GET /api/v1/tickets/history/grouped?groupBy=MERCHANT
+     * GET /api/v1/tickets/history/grouped?groupBy=MONTH&month=2026-06
+     * GET /api/v1/tickets/history/grouped?groupBy=MERCHANT&category=Alimentation
+     */
+    @GetMapping("/history/grouped")
+    public ResponseEntity<List<TicketHistoryGroupResponse>> getGroupedHistory(
+            @RequestParam(required = false, defaultValue = "MONTH") String groupBy,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String merchant,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String paymentMethod,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String scanStatus,
+            @RequestParam(required = false, defaultValue = "NEWEST_FIRST") String sortBy,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        System.out.println("🗂️ [TicketController] Historique groupé pour : " + authenticatedUser.getEmail());
+        System.out.println("   - groupBy: " + groupBy);
+        System.out.println("   - fromDate: " + fromDate);
+        System.out.println("   - toDate: " + toDate);
+        System.out.println("   - merchant: " + merchant);
+        System.out.println("   - minAmount: " + minAmount);
+        System.out.println("   - maxAmount: " + maxAmount);
+        System.out.println("   - category: " + category);
+        System.out.println("   - paymentMethod: " + paymentMethod);
+        System.out.println("   - month: " + month);
+        System.out.println("   - scanStatus: " + scanStatus);
+        System.out.println("   - sortBy: " + sortBy);
+
+        List<TicketHistoryGroupResponse> response = ticketHistoryService.getGroupedHistory(
+                authenticatedUser,
+                groupBy,
+                fromDate,
+                toDate,
+                merchant,
+                minAmount,
+                maxAmount,
+                category,
+                paymentMethod,
+                month,
+                scanStatus,
+                sortBy
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -259,6 +406,7 @@ public class TicketController {
      * - date
      * - total
      * - category
+     * - payment method
      * - items
      *
      * GET /api/v1/tickets/{ticketId}/editable
@@ -286,6 +434,7 @@ public class TicketController {
      * - date
      * - total
      * - category
+     * - payment method
      * - raw OCR text
      * - full item list
      *

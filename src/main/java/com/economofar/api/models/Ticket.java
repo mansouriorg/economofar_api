@@ -58,6 +58,15 @@ public class Ticket {
     private String category;
 
     /**
+     * Payment method:
+     * Carte, Espèces, Chèque, Virement, Apple Pay, etc.
+     *
+     * Used by history filters.
+     */
+    @Column(name = "payment_method", length = 100)
+    private String paymentMethod;
+
+    /**
      * Raw OCR or AI result.
      */
     @Column(columnDefinition = "TEXT")
@@ -214,6 +223,10 @@ public class Ticket {
         if (items == null) {
             items = new ArrayList<>();
         }
+
+        if (paymentMethod != null && paymentMethod.isBlank()) {
+            paymentMethod = null;
+        }
     }
 
     /**
@@ -231,6 +244,10 @@ public class Ticket {
 
         if (items == null) {
             items = new ArrayList<>();
+        }
+
+        if (paymentMethod != null && paymentMethod.isBlank()) {
+            paymentMethod = null;
         }
     }
 }

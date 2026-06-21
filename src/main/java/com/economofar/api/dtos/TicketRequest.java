@@ -38,6 +38,17 @@ public class TicketRequest {
     private String category;
 
     /**
+     * Payment method:
+     * Carte, Espèces, Chèque, Virement, Apple Pay, etc.
+     *
+     * Used by:
+     * - ticket saving
+     * - editable ticket data
+     * - history filters
+     */
+    private String paymentMethod;
+
+    /**
      * Image URL stored locally or on cloud storage.
      */
     private String imageUrl;

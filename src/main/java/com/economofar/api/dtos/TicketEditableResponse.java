@@ -27,6 +27,16 @@ public class TicketEditableResponse {
 
     private String category;
 
+    /**
+     * Payment method:
+     * Carte, Espèces, Chèque, Virement, Apple Pay, etc.
+     *
+     * Used by:
+     * - editable ticket screen
+     * - history filters
+     */
+    private String paymentMethod;
+
     private String imageUrl;
 
     private String rawOcrText;
@@ -55,6 +65,7 @@ public class TicketEditableResponse {
                 ticket.getTotalAmount(),
                 ticket.getPurchaseDate(),
                 ticket.getCategory(),
+                ticket.getPaymentMethod(),
                 ticket.getImageUrl(),
                 ticket.getRawOcrText(),
                 ticket.getScanStatus(),
