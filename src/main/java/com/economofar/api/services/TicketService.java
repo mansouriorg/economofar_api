@@ -5,6 +5,7 @@ import com.economofar.api.dtos.TicketEditableResponse;
 import com.economofar.api.dtos.TicketItemRequest;
 import com.economofar.api.dtos.TicketItemResponse;
 import com.economofar.api.dtos.TicketRequest;
+import com.economofar.api.models.ReceiptUsageType;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.TicketItem;
 import com.economofar.api.models.User;
@@ -38,13 +39,23 @@ public class TicketService {
     /**
      * Saves the validated ticket after the user reviews the OCR result.
      *
-     * This supports editable extracted data:
+     * This supports:
      * - merchant
      * - date
      * - total
      * - category
      * - payment method
-     * - editable items
+     * - image URL
+     * - raw OCR text
+     * - note
+     * - warranty date
+     * - reimbursable flag
+     * - personal/business usage type
+     * - VAT amount
+     * - deductible flag
+     * - project/client assignment
+     * - expense report reference
+     * - editable extracted items
      */
     @Transactional
     public Ticket createTicket(TicketRequest request, User user) {
@@ -73,12 +84,22 @@ public class TicketService {
                 .merchantName(merchantName)
                 .totalAmount(totalAmount)
                 .purchaseDate(parsedDate)
-                .category(request.getCategory())
+                .category(cleanNullable(request.getCategory()))
                 .paymentMethod(paymentMethod)
                 .imageUrl(validImageUrl)
                 .rawOcrText(request.getRawOcrText())
                 .user(user)
                 .build();
+
+        ticket.setNote(cleanNullable(request.getNote()));
+        ticket.setWarrantyDate(parseWarrantyDate(request.getWarrantyDate()));
+        ticket.setReimbursable(Boolean.TRUE.equals(request.getReimbursable()));
+        ticket.setUsageType(getValidUsageType(request.getUsageType()));
+        ticket.setVatAmount(request.getVatAmount());
+        ticket.setDeductible(Boolean.TRUE.equals(request.getDeductible()));
+        ticket.setProjectName(cleanNullable(request.getProjectName()));
+        ticket.setClientName(cleanNullable(request.getClientName()));
+        ticket.setExpenseReportReference(cleanNullable(request.getExpenseReportReference()));
 
         for (TicketItem item : extractedItems) {
             ticket.addItem(item);
@@ -159,7 +180,7 @@ public class TicketService {
         }
 
         if (request.getCategory() != null) {
-            ticket.setCategory(request.getCategory());
+            ticket.setCategory(cleanNullable(request.getCategory()));
         }
 
         if (request.getPaymentMethod() != null) {
@@ -221,6 +242,7 @@ public class TicketService {
      * - unit price
      * - total price
      * - category
+     * - personal/business usage type
      */
     @Transactional
     public TicketItemResponse updateItem(
@@ -279,7 +301,7 @@ public class TicketService {
     ) {
         Ticket ticket = getTicketForUser(ticketId, user);
 
-        ticket.setCategory(category);
+        ticket.setCategory(cleanNullable(category));
 
         Ticket savedTicket = repository.save(ticket);
 
@@ -396,7 +418,8 @@ public class TicketService {
 
         item.setUnitPrice(unitPrice);
         item.setTotalPrice(totalPrice);
-        item.setCategory(request.getCategory());
+        item.setCategory(cleanNullable(request.getCategory()));
+        item.setUsageType(request.getEffectiveUsageType());
     }
 
     /**
@@ -519,6 +542,25 @@ public class TicketService {
     }
 
     /**
+     * Parse warranty date.
+     *
+     * Expected format:
+     * yyyy-MM-dd
+     */
+    private LocalDate parseWarrantyDate(String warrantyDate) {
+        if (warrantyDate == null || warrantyDate.isBlank()) {
+            return null;
+        }
+
+        try {
+            return LocalDate.parse(warrantyDate.trim(), DateTimeFormatter.ISO_DATE);
+        } catch (Exception exception) {
+            System.err.println("⚠️ Warranty date parsing failed for input: '" + warrantyDate + "'. Using NULL.");
+            return null;
+        }
+    }
+
+    /**
      * Empêche les erreurs si imageUrl est vide ou null.
      */
     private String getValidImageUrl(String imageUrl) {
@@ -552,6 +594,30 @@ public class TicketService {
         }
 
         return null;
+    }
+
+    /**
+     * Normalise usageType.
+     */
+    private ReceiptUsageType getValidUsageType(ReceiptUsageType usageType) {
+        if (usageType != null) {
+            return usageType;
+        }
+
+        return ReceiptUsageType.PERSONAL;
+    }
+
+    /**
+     * Clean nullable strings.
+     */
+    private String cleanNullable(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /**

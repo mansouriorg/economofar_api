@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,8 +30,30 @@ public class Ticket {
 
     /**
      * Image URL stored locally or on cloud storage.
+     *
+     * Used by the receipt detail screen to show the original uploaded image.
      */
+    @Column(name = "image_url")
     private String imageUrl;
+
+    /**
+     * Original uploaded file name.
+     *
+     * Example:
+     * receipt_carrefour_2026_06_23.jpg
+     */
+    @Column(name = "original_file_name")
+    private String originalFileName;
+
+    /**
+     * Image content type.
+     *
+     * Example:
+     * image/jpeg
+     * image/png
+     */
+    @Column(name = "image_content_type")
+    private String imageContentType;
 
     /**
      * Merchant name.
@@ -53,7 +76,7 @@ public class Ticket {
     private LocalDateTime purchaseDate;
 
     /**
-     * Ticket category: Alimentation, Transport, Santé, etc.
+     * Ticket category: Alimentation, Transport, Santé, Restaurant, Shopping, etc.
      */
     private String category;
 
@@ -61,16 +84,92 @@ public class Ticket {
      * Payment method:
      * Carte, Espèces, Chèque, Virement, Apple Pay, etc.
      *
-     * Used by history filters.
+     * Used by history filters and receipt detail.
      */
     @Column(name = "payment_method", length = 100)
     private String paymentMethod;
 
     /**
      * Raw OCR or AI result.
+     *
+     * Used by:
+     * - intelligent search
+     * - receipt detail
+     * - export CSV/PDF
      */
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "raw_ocr_text", columnDefinition = "TEXT")
     private String rawOcrText;
+
+    /**
+     * Receipt note added by the user.
+     *
+     * Example:
+     * "To reimburse by company"
+     * "Warranty receipt for laptop"
+     */
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
+
+    /**
+     * Warranty date.
+     *
+     * Used for products with warranty.
+     */
+    @Column(name = "warranty_date")
+    private LocalDate warrantyDate;
+
+    /**
+     * Whether this receipt can be reimbursed.
+     */
+    @Builder.Default
+    @Column(name = "reimbursable", nullable = false)
+    private Boolean reimbursable = false;
+
+    /**
+     * Personal or business receipt.
+     */
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "usage_type", nullable = false, length = 30)
+    private ReceiptUsageType usageType = ReceiptUsageType.PERSONAL;
+
+    /**
+     * VAT amount for business/accounting use.
+     */
+    @Column(name = "vat_amount", precision = 12, scale = 2)
+    private BigDecimal vatAmount;
+
+    /**
+     * Whether this receipt is deductible.
+     */
+    @Builder.Default
+    @Column(name = "deductible", nullable = false)
+    private Boolean deductible = false;
+
+    /**
+     * Project name for business receipts.
+     *
+     * Example:
+     * "Website redesign"
+     * "Client event"
+     */
+    @Column(name = "project_name")
+    private String projectName;
+
+    /**
+     * Client name for business receipts.
+     */
+    @Column(name = "client_name")
+    private String clientName;
+
+    /**
+     * Expense report reference.
+     *
+     * Example:
+     * EXP-2026-06-001
+     */
+    @Column(name = "expense_report_reference")
+    private String expenseReportReference;
 
     /**
      * Scan status tracking:
@@ -126,6 +225,7 @@ public class Ticket {
      * - delete wrong item
      * - change quantity
      * - change item category
+     * - mark item as PERSONAL or BUSINESS
      */
     @Builder.Default
     @OneToMany(
@@ -227,6 +327,50 @@ public class Ticket {
         if (paymentMethod != null && paymentMethod.isBlank()) {
             paymentMethod = null;
         }
+
+        if (category != null && category.isBlank()) {
+            category = null;
+        }
+
+        if (imageUrl != null && imageUrl.isBlank()) {
+            imageUrl = null;
+        }
+
+        if (originalFileName != null && originalFileName.isBlank()) {
+            originalFileName = null;
+        }
+
+        if (imageContentType != null && imageContentType.isBlank()) {
+            imageContentType = null;
+        }
+
+        if (note != null && note.isBlank()) {
+            note = null;
+        }
+
+        if (usageType == null) {
+            usageType = ReceiptUsageType.PERSONAL;
+        }
+
+        if (reimbursable == null) {
+            reimbursable = false;
+        }
+
+        if (deductible == null) {
+            deductible = false;
+        }
+
+        if (projectName != null && projectName.isBlank()) {
+            projectName = null;
+        }
+
+        if (clientName != null && clientName.isBlank()) {
+            clientName = null;
+        }
+
+        if (expenseReportReference != null && expenseReportReference.isBlank()) {
+            expenseReportReference = null;
+        }
     }
 
     /**
@@ -248,6 +392,50 @@ public class Ticket {
 
         if (paymentMethod != null && paymentMethod.isBlank()) {
             paymentMethod = null;
+        }
+
+        if (category != null && category.isBlank()) {
+            category = null;
+        }
+
+        if (imageUrl != null && imageUrl.isBlank()) {
+            imageUrl = null;
+        }
+
+        if (originalFileName != null && originalFileName.isBlank()) {
+            originalFileName = null;
+        }
+
+        if (imageContentType != null && imageContentType.isBlank()) {
+            imageContentType = null;
+        }
+
+        if (note != null && note.isBlank()) {
+            note = null;
+        }
+
+        if (usageType == null) {
+            usageType = ReceiptUsageType.PERSONAL;
+        }
+
+        if (reimbursable == null) {
+            reimbursable = false;
+        }
+
+        if (deductible == null) {
+            deductible = false;
+        }
+
+        if (projectName != null && projectName.isBlank()) {
+            projectName = null;
+        }
+
+        if (clientName != null && clientName.isBlank()) {
+            clientName = null;
+        }
+
+        if (expenseReportReference != null && expenseReportReference.isBlank()) {
+            expenseReportReference = null;
         }
     }
 }

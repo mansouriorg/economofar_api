@@ -1,5 +1,6 @@
 package com.economofar.api.dtos;
 
+import com.economofar.api.models.ReceiptUsageType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -31,12 +32,21 @@ public class TicketItemRequest {
 
     private String category;
 
+    /**
+     * Personal or business item.
+     *
+     * Values:
+     * PERSONAL
+     * BUSINESS
+     */
+    private ReceiptUsageType usageType;
+
     public Integer getEffectiveQuantity() {
-        if (quantity != null) {
+        if (quantity != null && quantity > 0) {
             return quantity;
         }
 
-        if (qty != null) {
+        if (qty != null && qty > 0) {
             return qty;
         }
 
@@ -62,6 +72,16 @@ public class TicketItemRequest {
             return BigDecimal.ZERO;
         }
 
-        return effectiveUnitPrice.multiply(BigDecimal.valueOf(getEffectiveQuantity()));
+        return effectiveUnitPrice.multiply(
+                BigDecimal.valueOf(getEffectiveQuantity())
+        );
+    }
+
+    public ReceiptUsageType getEffectiveUsageType() {
+        if (usageType != null) {
+            return usageType;
+        }
+
+        return ReceiptUsageType.PERSONAL;
     }
 }
