@@ -6,6 +6,7 @@ import com.economofar.api.dtos.TicketHistoryGroupResponse;
 import com.economofar.api.dtos.TicketHistoryResponse;
 import com.economofar.api.dtos.TicketItemRequest;
 import com.economofar.api.dtos.TicketItemResponse;
+import com.economofar.api.dtos.TicketMonthlyReportResponse;
 import com.economofar.api.dtos.TicketRequest;
 import com.economofar.api.dtos.TicketScanStatusResponse;
 import com.economofar.api.models.ScanStatus;
@@ -13,11 +14,14 @@ import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.repositories.TicketRepository;
 import com.economofar.api.services.OllamaService;
+import com.economofar.api.services.TicketExportService;
 import com.economofar.api.services.TicketHistoryService;
 import com.economofar.api.services.TicketScanStatusService;
 import com.economofar.api.services.TicketService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -42,6 +46,7 @@ public class TicketController {
     private final TicketRepository ticketRepository;
     private final TicketScanStatusService ticketScanStatusService;
     private final TicketHistoryService ticketHistoryService;
+    private final TicketExportService ticketExportService;
 
     /**
      * ÉTAPE 1 : UPLOAD + OCR ANALYSIS
@@ -188,8 +193,6 @@ public class TicketController {
     /**
      * ÉTAPE 3 : BASIC HISTORY
      *
-     * Récupère la liste simple des tickets de l'utilisateur connecté.
-     *
      * GET /api/v1/tickets/history
      */
     @GetMapping("/history")
@@ -206,37 +209,29 @@ public class TicketController {
     }
 
     /**
-     * ÉTAPE 3.1 : ADVANCED HISTORY SEARCH
+     * ÉTAPE 3.1 : ADVANCED HISTORY SEARCH + INTELLIGENT SEARCH
      *
-     * Filters:
-     * - fromDate: yyyy-MM-dd
-     * - toDate: yyyy-MM-dd
-     * - merchant
-     * - minAmount
-     * - maxAmount
-     * - category
-     * - paymentMethod
-     * - month: yyyy-MM
-     * - scanStatus
-     *
-     * Sorting:
-     * - NEWEST_FIRST
-     * - OLDEST_FIRST
-     * - HIGHEST_AMOUNT
-     * - LOWEST_AMOUNT
-     * - MERCHANT_NAME
+     * Intelligent search:
+     * - search by merchant
+     * - search by product/item name
+     * - search by item category
+     * - search by ticket category
+     * - search by payment method
+     * - search by OCR text
+     * - search by date yyyy-MM-dd
+     * - search by month yyyy-MM
      *
      * Examples:
+     * GET /api/v1/tickets/history/search?search=milk
+     * GET /api/v1/tickets/history/search?search=Carrefour
+     * GET /api/v1/tickets/history/search?search=2026-06
      * GET /api/v1/tickets/history/search?month=2026-06
      * GET /api/v1/tickets/history/search?merchant=Carrefour
      * GET /api/v1/tickets/history/search?minAmount=20&maxAmount=100
-     * GET /api/v1/tickets/history/search?category=Alimentation
-     * GET /api/v1/tickets/history/search?paymentMethod=Carte
-     * GET /api/v1/tickets/history/search?scanStatus=SAVED
-     * GET /api/v1/tickets/history/search?sortBy=HIGHEST_AMOUNT
      */
     @GetMapping("/history/search")
     public ResponseEntity<List<TicketHistoryResponse>> searchHistory(
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String toDate,
             @RequestParam(required = false) String merchant,
@@ -252,6 +247,7 @@ public class TicketController {
         User authenticatedUser = requireAuthenticatedUser(user);
 
         System.out.println("🔎 [TicketController] Recherche historique avancée pour : " + authenticatedUser.getEmail());
+        System.out.println("   - search: " + search);
         System.out.println("   - fromDate: " + fromDate);
         System.out.println("   - toDate: " + toDate);
         System.out.println("   - merchant: " + merchant);
@@ -265,6 +261,7 @@ public class TicketController {
 
         List<TicketHistoryResponse> response = ticketHistoryService.searchHistory(
                 authenticatedUser,
+                search,
                 fromDate,
                 toDate,
                 merchant,
@@ -287,17 +284,16 @@ public class TicketController {
      * - MONTH
      * - MERCHANT
      *
-     * Supports the same filters and sorting as advanced history search.
-     *
      * Examples:
      * GET /api/v1/tickets/history/grouped?groupBy=MONTH
      * GET /api/v1/tickets/history/grouped?groupBy=MERCHANT
+     * GET /api/v1/tickets/history/grouped?groupBy=MONTH&search=milk
      * GET /api/v1/tickets/history/grouped?groupBy=MONTH&month=2026-06
-     * GET /api/v1/tickets/history/grouped?groupBy=MERCHANT&category=Alimentation
      */
     @GetMapping("/history/grouped")
     public ResponseEntity<List<TicketHistoryGroupResponse>> getGroupedHistory(
             @RequestParam(required = false, defaultValue = "MONTH") String groupBy,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String toDate,
             @RequestParam(required = false) String merchant,
@@ -314,6 +310,7 @@ public class TicketController {
 
         System.out.println("🗂️ [TicketController] Historique groupé pour : " + authenticatedUser.getEmail());
         System.out.println("   - groupBy: " + groupBy);
+        System.out.println("   - search: " + search);
         System.out.println("   - fromDate: " + fromDate);
         System.out.println("   - toDate: " + toDate);
         System.out.println("   - merchant: " + merchant);
@@ -328,6 +325,7 @@ public class TicketController {
         List<TicketHistoryGroupResponse> response = ticketHistoryService.getGroupedHistory(
                 authenticatedUser,
                 groupBy,
+                search,
                 fromDate,
                 toDate,
                 merchant,
@@ -338,6 +336,167 @@ public class TicketController {
                 month,
                 scanStatus,
                 sortBy
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ÉTAPE 3.3 : EXPORT CSV
+     *
+     * Exports filtered tickets as CSV.
+     *
+     * Examples:
+     * GET /api/v1/tickets/export/csv
+     * GET /api/v1/tickets/export/csv?search=milk
+     * GET /api/v1/tickets/export/csv?month=2026-06
+     */
+    @GetMapping("/export/csv")
+    public ResponseEntity<byte[]> exportCsv(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String merchant,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String paymentMethod,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String scanStatus,
+            @RequestParam(required = false, defaultValue = "NEWEST_FIRST") String sortBy,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        byte[] file = ticketExportService.exportCsv(
+                authenticatedUser,
+                search,
+                fromDate,
+                toDate,
+                merchant,
+                minAmount,
+                maxAmount,
+                category,
+                paymentMethod,
+                month,
+                scanStatus,
+                sortBy
+        );
+
+        return ResponseEntity.ok()
+                .headers(downloadHeaders("economofar-history.csv", "text/csv; charset=UTF-8"))
+                .body(file);
+    }
+
+    /**
+     * ÉTAPE 3.4 : EXPORT PDF
+     *
+     * Exports filtered tickets as PDF.
+     *
+     * Examples:
+     * GET /api/v1/tickets/export/pdf
+     * GET /api/v1/tickets/export/pdf?search=milk
+     * GET /api/v1/tickets/export/pdf?month=2026-06
+     */
+    @GetMapping("/export/pdf")
+    public ResponseEntity<byte[]> exportPdf(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
+            @RequestParam(required = false) String merchant,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String paymentMethod,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String scanStatus,
+            @RequestParam(required = false, defaultValue = "NEWEST_FIRST") String sortBy,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        byte[] file = ticketExportService.exportPdf(
+                authenticatedUser,
+                search,
+                fromDate,
+                toDate,
+                merchant,
+                minAmount,
+                maxAmount,
+                category,
+                paymentMethod,
+                month,
+                scanStatus,
+                sortBy
+        );
+
+        return ResponseEntity.ok()
+                .headers(downloadHeaders("economofar-history.pdf", MediaType.APPLICATION_PDF_VALUE))
+                .body(file);
+    }
+
+    /**
+     * ÉTAPE 3.5 : MONTHLY CSV REPORT
+     *
+     * Example:
+     * GET /api/v1/tickets/export/monthly/csv?month=2026-06
+     */
+    @GetMapping("/export/monthly/csv")
+    public ResponseEntity<byte[]> exportMonthlyCsv(
+            @RequestParam String month,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        byte[] file = ticketExportService.exportMonthlyCsv(
+                authenticatedUser,
+                month
+        );
+
+        return ResponseEntity.ok()
+                .headers(downloadHeaders("economofar-monthly-" + month + ".csv", "text/csv; charset=UTF-8"))
+                .body(file);
+    }
+
+    /**
+     * ÉTAPE 3.6 : MONTHLY PDF REPORT
+     *
+     * Example:
+     * GET /api/v1/tickets/export/monthly/pdf?month=2026-06
+     */
+    @GetMapping("/export/monthly/pdf")
+    public ResponseEntity<byte[]> exportMonthlyPdf(
+            @RequestParam String month,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        byte[] file = ticketExportService.exportMonthlyPdf(
+                authenticatedUser,
+                month
+        );
+
+        return ResponseEntity.ok()
+                .headers(downloadHeaders("economofar-monthly-" + month + ".pdf", MediaType.APPLICATION_PDF_VALUE))
+                .body(file);
+    }
+
+    /**
+     * ÉTAPE 3.7 : MONTHLY REPORT SUMMARY AS JSON
+     *
+     * Example:
+     * GET /api/v1/tickets/export/monthly/report?month=2026-06
+     */
+    @GetMapping("/export/monthly/report")
+    public ResponseEntity<TicketMonthlyReportResponse> getMonthlyReport(
+            @RequestParam String month,
+            @AuthenticationPrincipal User user
+    ) {
+        User authenticatedUser = requireAuthenticatedUser(user);
+
+        TicketMonthlyReportResponse response = ticketExportService.getMonthlyReport(
+                authenticatedUser,
+                month
         );
 
         return ResponseEntity.ok(response);
@@ -559,6 +718,19 @@ public class TicketController {
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    private HttpHeaders downloadHeaders(String filename, String contentType) {
+        HttpHeaders headers = new HttpHeaders();
+
+        headers.add(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"" + filename + "\""
+        );
+
+        headers.add(HttpHeaders.CONTENT_TYPE, contentType);
+
+        return headers;
     }
 
     private User requireAuthenticatedUser(User user) {

@@ -4,9 +4,14 @@ import com.economofar.api.dtos.TicketHistoryGroupResponse;
 import com.economofar.api.dtos.TicketHistoryResponse;
 import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
+import com.economofar.api.models.TicketItem;
 import com.economofar.api.models.User;
 import com.economofar.api.repositories.TicketRepository;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.CriteriaBuilder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -34,9 +39,28 @@ public class TicketHistoryService {
 
     private final TicketRepository ticketRepository;
 
+    /**
+     * Advanced history search.
+     *
+     * Supports:
+     * - global intelligent search
+     * - date filters
+     * - merchant filter
+     * - amount filters
+     * - category filter
+     * - payment method filter
+     * - month filter
+     * - scan status filter
+     * - sorting
+     *
+     * Example:
+     * search = "milk"
+     * returns receipts containing milk in item names, OCR text, merchant, category, etc.
+     */
     @Transactional(readOnly = true)
     public List<TicketHistoryResponse> searchHistory(
             User user,
+            String search,
             String fromDate,
             String toDate,
             String merchant,
@@ -57,6 +81,7 @@ public class TicketHistoryService {
 
         Specification<Ticket> specification = buildSpecification(
                 user,
+                search,
                 fromDate,
                 toDate,
                 merchant,
@@ -77,10 +102,19 @@ public class TicketHistoryService {
                 .toList();
     }
 
+    /**
+     * Grouped history.
+     *
+     * Supports:
+     * - group by month
+     * - group by merchant
+     * - all filters from searchHistory
+     */
     @Transactional(readOnly = true)
     public List<TicketHistoryGroupResponse> getGroupedHistory(
             User user,
             String groupBy,
+            String search,
             String fromDate,
             String toDate,
             String merchant,
@@ -94,6 +128,7 @@ public class TicketHistoryService {
     ) {
         List<TicketHistoryResponse> tickets = searchHistory(
                 user,
+                search,
                 fromDate,
                 toDate,
                 merchant,
@@ -162,6 +197,7 @@ public class TicketHistoryService {
 
     private Specification<Ticket> buildSpecification(
             User user,
+            String search,
             String fromDate,
             String toDate,
             String merchant,
@@ -173,6 +209,10 @@ public class TicketHistoryService {
             String scanStatus
     ) {
         return (root, query, criteriaBuilder) -> {
+            if (query != null) {
+                query.distinct(true);
+            }
+
             List<Predicate> predicates = new ArrayList<>();
 
             predicates.add(criteriaBuilder.equal(root.get("user"), user));
@@ -269,8 +309,120 @@ public class TicketHistoryService {
                 );
             }
 
+            Predicate intelligentSearchPredicate = buildIntelligentSearchPredicate(
+                    search,
+                    root,
+                    criteriaBuilder
+            );
+
+            if (intelligentSearchPredicate != null) {
+                predicates.add(intelligentSearchPredicate);
+            }
+
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    /**
+     * Intelligent global search.
+     *
+     * Searches inside:
+     * - merchant name
+     * - ticket category
+     * - payment method
+     * - raw OCR text
+     * - product/item name
+     * - product/item category
+     * - exact date yyyy-MM-dd
+     * - month yyyy-MM
+     *
+     * Example:
+     * search = "milk"
+     * returns tickets where an item name or OCR text contains "milk".
+     */
+    private Predicate buildIntelligentSearchPredicate(
+            String search,
+            Root<Ticket> root,
+            CriteriaBuilder criteriaBuilder
+    ) {
+        if (search == null || search.isBlank()) {
+            return null;
+        }
+
+        String value = search.trim().toLowerCase();
+        String likeValue = "%" + value + "%";
+
+        Join<Ticket, TicketItem> itemJoin = root.join("items", JoinType.LEFT);
+
+        List<Predicate> searchPredicates = new ArrayList<>();
+
+        searchPredicates.add(
+                criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("merchantName")),
+                        likeValue
+                )
+        );
+
+        searchPredicates.add(
+                criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("category")),
+                        likeValue
+                )
+        );
+
+        searchPredicates.add(
+                criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("paymentMethod")),
+                        likeValue
+                )
+        );
+
+        searchPredicates.add(
+                criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("rawOcrText")),
+                        likeValue
+                )
+        );
+
+        searchPredicates.add(
+                criteriaBuilder.like(
+                        criteriaBuilder.lower(itemJoin.get("name")),
+                        likeValue
+                )
+        );
+
+        searchPredicates.add(
+                criteriaBuilder.like(
+                        criteriaBuilder.lower(itemJoin.get("category")),
+                        likeValue
+                )
+        );
+
+        LocalDate searchedDate = parseSearchDate(value);
+
+        if (searchedDate != null) {
+            searchPredicates.add(
+                    criteriaBuilder.between(
+                            root.get("purchaseDate"),
+                            searchedDate.atStartOfDay(),
+                            searchedDate.atTime(LocalTime.MAX)
+                    )
+            );
+        }
+
+        YearMonth searchedMonth = parseSearchMonth(value);
+
+        if (searchedMonth != null) {
+            searchPredicates.add(
+                    criteriaBuilder.between(
+                            root.get("purchaseDate"),
+                            searchedMonth.atDay(1).atStartOfDay(),
+                            searchedMonth.atEndOfMonth().atTime(LocalTime.MAX)
+                    )
+            );
+        }
+
+        return criteriaBuilder.or(searchPredicates.toArray(new Predicate[0]));
     }
 
     private Sort buildSort(String sortBy) {
@@ -348,6 +500,30 @@ public class TicketHistoryService {
                     HttpStatus.BAD_REQUEST,
                     "Invalid month format. Expected yyyy-MM, example: 2026-06."
             );
+        }
+    }
+
+    private LocalDate parseSearchDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private YearMonth parseSearchMonth(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return YearMonth.parse(value.trim());
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

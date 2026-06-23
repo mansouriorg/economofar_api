@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -31,9 +33,38 @@ public class TicketHistoryResponse {
 
     private String imageUrl;
 
+    /**
+     * Raw OCR text.
+     *
+     * Used by:
+     * - intelligent search
+     * - export CSV
+     * - export PDF if needed
+     */
+    private String rawOcrText;
+
+    /**
+     * Editable extracted items.
+     *
+     * Used by:
+     * - intelligent search by product name
+     * - export CSV/PDF with item details
+     * - frontend advanced history if needed
+     */
+    private List<TicketItemResponse> items = new ArrayList<>();
+
     public static TicketHistoryResponse fromTicket(Ticket ticket) {
         if (ticket == null) {
             return null;
+        }
+
+        List<TicketItemResponse> itemResponses = new ArrayList<>();
+
+        if (ticket.getItems() != null) {
+            itemResponses = ticket.getItems()
+                    .stream()
+                    .map(TicketItemResponse::fromItem)
+                    .toList();
         }
 
         return new TicketHistoryResponse(
@@ -44,7 +75,9 @@ public class TicketHistoryResponse {
                 ticket.getCategory(),
                 ticket.getPaymentMethod(),
                 ticket.getScanStatus(),
-                ticket.getImageUrl()
+                ticket.getImageUrl(),
+                ticket.getRawOcrText(),
+                itemResponses
         );
     }
 }
