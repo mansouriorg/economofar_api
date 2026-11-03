@@ -1,5 +1,6 @@
 package com.economofar.api.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -45,6 +46,7 @@ public class UserBudget {
         return id;
     }
 
+    @JsonIgnore
     public User getUser() {
         return user;
     }

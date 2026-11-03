@@ -6,9 +6,11 @@ import com.economofar.api.dtos.UpdateUserProfileRequest;
 import com.economofar.api.dtos.UserProfileResponse;
 import com.economofar.api.models.User;
 import com.economofar.api.repositories.UserRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Locale;
 
@@ -17,6 +19,7 @@ public class UserProfileService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttempts passwordAttempts = new LoginAttempts();
 
     public UserProfileService(
             UserRepository userRepository,
@@ -34,7 +37,7 @@ public class UserProfileService {
     @Transactional
     public UserProfileResponse updateProfile(User user, UpdateUserProfileRequest request) {
         if (request == null) {
-            throw new RuntimeException("Request body is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request body is required");
         }
 
         boolean emailChanged = false;
@@ -43,11 +46,11 @@ public class UserProfileService {
             String firstName = clean(request.getFirstName());
 
             if (firstName == null) {
-                throw new RuntimeException("First name cannot be empty");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "First name cannot be empty");
             }
 
             if (firstName.length() > 100) {
-                throw new RuntimeException("First name is too long");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "First name is too long");
             }
 
             user.setFirstName(firstName);
@@ -57,11 +60,11 @@ public class UserProfileService {
             String lastName = clean(request.getLastName());
 
             if (lastName == null) {
-                throw new RuntimeException("Last name cannot be empty");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Last name cannot be empty");
             }
 
             if (lastName.length() > 100) {
-                throw new RuntimeException("Last name is too long");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Last name is too long");
             }
 
             user.setLastName(lastName);
@@ -71,18 +74,18 @@ public class UserProfileService {
             String email = clean(request.getEmail());
 
             if (email == null) {
-                throw new RuntimeException("Email cannot be empty");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email cannot be empty");
             }
 
             email = email.toLowerCase(Locale.ROOT);
 
             if (!isValidEmail(email)) {
-                throw new RuntimeException("Invalid email format");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid email format");
             }
 
             if (!email.equalsIgnoreCase(user.getEmail())) {
-                if (userRepository.existsByEmail(email)) {
-                    throw new RuntimeException("This email is already used by another account");
+                if (userRepository.existsByEmailIgnoreCase(email)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This email is already used by another account");
                 }
 
                 user.setEmail(email);
@@ -94,7 +97,7 @@ public class UserProfileService {
             String companyName = clean(request.getCompanyName());
 
             if (companyName != null && companyName.length() > 150) {
-                throw new RuntimeException("Company name is too long");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Company name is too long");
             }
 
             user.setCompanyName(companyName);
@@ -104,13 +107,13 @@ public class UserProfileService {
             String currency = clean(request.getPreferredCurrency());
 
             if (currency == null) {
-                throw new RuntimeException("Preferred currency cannot be empty");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Preferred currency cannot be empty");
             }
 
             currency = currency.toUpperCase(Locale.ROOT);
 
             if (!isValidCurrency(currency)) {
-                throw new RuntimeException("Invalid currency. Use a 3-letter currency code like EUR, USD, GBP");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid currency. Use a 3-letter currency code like EUR, USD, GBP");
             }
 
             user.setPreferredCurrency(currency);
@@ -120,13 +123,13 @@ public class UserProfileService {
             String language = clean(request.getLanguage());
 
             if (language == null) {
-                throw new RuntimeException("Language cannot be empty");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Language cannot be empty");
             }
 
             language = language.toLowerCase(Locale.ROOT);
 
             if (!isValidLanguage(language)) {
-                throw new RuntimeException("Invalid language. Supported values are fr, en, ar");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid language. Supported values are fr, en, ar");
             }
 
             user.setLanguage(language);
@@ -142,35 +145,50 @@ public class UserProfileService {
     @Transactional
     public PasswordUpdateResponse updatePassword(User user, UpdatePasswordRequest request) {
         if (request == null) {
-            throw new RuntimeException("Request body is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request body is required");
         }
 
         if (request.getCurrentPassword() == null || request.getCurrentPassword().isBlank()) {
-            throw new RuntimeException("Current password is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
         }
 
         if (request.getNewPassword() == null || request.getNewPassword().isBlank()) {
-            throw new RuntimeException("New password is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password is required");
         }
 
         if (request.getConfirmPassword() == null || request.getConfirmPassword().isBlank()) {
-            throw new RuntimeException("Password confirmation is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password confirmation is required");
         }
 
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
-            throw new RuntimeException("New password and confirmation do not match");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password and confirmation do not match");
         }
 
         if (request.getNewPassword().length() < 8) {
-            throw new RuntimeException("Password must contain at least 8 characters");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least 8 characters");
+        }
+
+        String passwordProblem = PasswordPolicy.weakness(request.getNewPassword(), user.getEmail());
+
+        if (passwordProblem != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, passwordProblem);
+        }
+
+        String attemptKey = String.valueOf(user.getEmail()).toLowerCase(Locale.ROOT);
+
+        if (passwordAttempts.isLocked(attemptKey)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many wrong passwords. Try again in a few minutes.");
         }
 
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new RuntimeException("Current password is incorrect");
+            passwordAttempts.recordFailure(attemptKey);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
         }
 
+        passwordAttempts.clear(attemptKey);
+
         if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
-            throw new RuntimeException("New password must be different from the current password");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be different from the current password");
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));

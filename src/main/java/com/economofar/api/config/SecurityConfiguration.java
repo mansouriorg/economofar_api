@@ -1,5 +1,6 @@
 package com.economofar.api.config;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,36 +17,45 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfiguration {
 
-    // On injecte nos deux composants de sécurité créés précédemment
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(AbstractHttpConfigurer::disable) // Désactive CSRF (inutile pour API Mobile)
-            
+            // CSRF is useless for a stateless mobile API
+            .csrf(AbstractHttpConfigurer::disable)
+
             .authorizeHttpRequests(auth -> auth
-                // ✅ ZONES PUBLIQUES (Tout le monde peut y accéder)
-                .requestMatchers("/api/auth/**").permitAll() // Login & Register
-                .requestMatchers("/uploads/**").permitAll()  // Voir les images
-                
-                // 🔒 ZONES PRIVÉES (Il faut un Token valide)
-                // Note : J'ai retiré "/api/images/**" d'ici. 
-                // Maintenant, l'iPhone DEVRA envoyer le token pour uploader un ticket !
+                // Public zones
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/uploads/**").authenticated() // uploaded images need a signed in user
+                .requestMatchers("/error").permitAll()
+
+                // Everything else needs a valid token
                 .anyRequest().authenticated()
             )
-            
-            // On configure la session en "Stateless" (pas de cookies, chaque requête est indépendante)
+
+            // No cookies, every request is independent
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
-            
-            // On déclare notre fournisseur d'authentification (celui avec BCrypt)
+
+            // Missing / invalid / expired token => clean 401 JSON.
+            // The iPhone app uses this 401 to send the user back to the login screen.
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write(
+                            "{\"status\":401,\"message\":\"Session expirée ou invalide. Veuillez vous reconnecter.\"}"
+                    );
+                })
+            )
+
             .authenticationProvider(authenticationProvider)
-            
-            // 🔥 LE PLUS IMPORTANT : On place notre filtre JWT avant le filtre classique
-            // Spring va d'abord vérifier le token. S'il est bon, il laisse passer.
+
+            // The JWT filter runs before the classic login filter
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

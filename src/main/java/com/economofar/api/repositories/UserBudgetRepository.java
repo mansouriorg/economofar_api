@@ -15,4 +15,6 @@ public interface UserBudgetRepository extends JpaRepository<UserBudget, Long> {
      * Utilisé dans le dashboard pour calculer le budget restant.
      */
     Optional<UserBudget> findByUser(User user);
+
+    void deleteByUser(User user);
 }

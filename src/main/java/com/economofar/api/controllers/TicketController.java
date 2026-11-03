@@ -13,11 +13,13 @@ import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.repositories.TicketRepository;
+import com.economofar.api.services.FileStorageService;
 import com.economofar.api.services.OllamaService;
 import com.economofar.api.services.TicketExportService;
 import com.economofar.api.services.TicketHistoryService;
 import com.economofar.api.services.TicketScanStatusService;
 import com.economofar.api.services.TicketService;
+import com.economofar.api.services.UploadGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -38,7 +40,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/tickets")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class TicketController {
 
     private final TicketService service;
@@ -47,6 +48,7 @@ public class TicketController {
     private final TicketScanStatusService ticketScanStatusService;
     private final TicketHistoryService ticketHistoryService;
     private final TicketExportService ticketExportService;
+    private final FileStorageService fileStorageService;
 
     /**
      * ÉTAPE 1 : UPLOAD + OCR ANALYSIS
@@ -76,6 +78,17 @@ public class TicketController {
             );
         }
 
+        UploadGuard.requireImage(file);
+
+        String contentType = file.getContentType();
+
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "Seules les images (JPEG, PNG, HEIC) sont acceptées"
+            );
+        }
+
         Ticket ticket = null;
 
         try {
@@ -88,6 +101,19 @@ public class TicketController {
                     .build();
 
             ticket = ticketScanStatusService.markUploading(ticket);
+
+            // Keep the photo: the receipt detail screen needs it later
+            String storedFileName = fileStorageService.storeFile(file);
+            String originalName = file.getOriginalFilename();
+
+            if (originalName != null && originalName.length() > 200) {
+                originalName = originalName.substring(0, 200);
+            }
+
+            ticket.setImageUrl("/uploads/" + storedFileName);
+            ticket.setOriginalFileName(originalName);
+            ticket.setImageContentType(contentType);
+            ticket = ticketRepository.save(ticket);
 
             System.out.println("⬆️ [TicketController] Ticket upload started. ID: " + ticket.getId());
 
@@ -544,8 +570,7 @@ public class TicketController {
                 ScanStatus.UPLOADING,
                 ScanStatus.ANALYZING,
                 ScanStatus.OCR_COMPLETED,
-                ScanStatus.NEEDS_REVIEW,
-                ScanStatus.FAILED
+                ScanStatus.NEEDS_REVIEW
         );
 
         return ticketRepository
@@ -754,6 +779,7 @@ public class TicketController {
         Map<String, Object> response = new LinkedHashMap<>();
 
         response.put("ticketId", ticket != null ? ticket.getId() : null);
+        response.put("imageUrl", ticket != null ? ticket.getImageUrl() : null);
         response.put("scanStatus", ticket != null ? ticket.getScanStatus() : ScanStatus.FAILED);
         response.put("scanErrorMessage", ticket != null ? ticket.getScanErrorMessage() : message);
         response.put("scanStartedAt", ticket != null ? ticket.getScanStartedAt() : null);
@@ -764,5 +790,31 @@ public class TicketController {
         response.put("message", message);
 
         return response;
+    }
+
+    /**
+     * Asks whether a receipt with the same merchant, amount and day is already saved.
+     * The app calls this just before saving and shows a warning when needed.
+     */
+    @GetMapping("/duplicate-check")
+    public ResponseEntity<Map<String, Object>> checkDuplicate(
+            @RequestParam String merchant,
+            @RequestParam BigDecimal amount,
+            @RequestParam(required = false) String date,
+            @AuthenticationPrincipal User user
+    ) {
+        Ticket duplicate = service.findPossibleDuplicate(user, merchant, amount, date);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("duplicate", duplicate != null);
+
+        if (duplicate != null) {
+            response.put("ticketId", duplicate.getId());
+            response.put("merchantName", duplicate.getMerchantName());
+            response.put("totalAmount", duplicate.getTotalAmount());
+            response.put("purchaseDate", duplicate.getPurchaseDate());
+        }
+
+        return ResponseEntity.ok(response);
     }
 }

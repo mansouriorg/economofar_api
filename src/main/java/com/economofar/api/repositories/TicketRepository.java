@@ -126,4 +126,69 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID>, JpaSpecif
             User user,
             List<ScanStatus> scanStatuses
     );
+
+    // ------------------------------------------------------------------
+    // Added by the Economofar upgrade
+    // ------------------------------------------------------------------
+
+    /**
+     * Saved tickets only (history, dashboard). Unfinished scans are excluded.
+     */
+    @EntityGraph(attributePaths = "items")
+    List<Ticket> findByUserAndScanStatusOrderByPurchaseDateDesc(User user, ScanStatus scanStatus);
+
+    @EntityGraph(attributePaths = "items")
+    List<Ticket> findTop5ByUserAndScanStatusOrderByPurchaseDateDesc(User user, ScanStatus scanStatus);
+
+    @EntityGraph(attributePaths = "items")
+    Ticket findTopByUserAndScanStatusOrderByPurchaseDateDesc(User user, ScanStatus scanStatus);
+
+    /**
+     * Saved tickets bought after a date, with their items, the oldest first.
+     * Used to follow the price of the same item over time.
+     */
+    @EntityGraph(attributePaths = "items")
+    List<Ticket> findByUserAndScanStatusAndPurchaseDateAfterOrderByPurchaseDateAsc(
+            User user,
+            ScanStatus scanStatus,
+            LocalDateTime since
+    );
+
+    /**
+     * Saved tickets that have a warranty end date, the soonest first.
+     */
+    List<Ticket> findByUserAndScanStatusAndWarrantyDateIsNotNullOrderByWarrantyDateAsc(
+            User user,
+            ScanStatus scanStatus
+    );
+
+    /**
+     * The 300 most recent saved tickets (without their items). Used to learn
+     * how the user usually files the receipts of a shop.
+     */
+    List<Ticket> findTop300ByUserAndScanStatusOrderByPurchaseDateDesc(User user, ScanStatus scanStatus);
+
+    List<Ticket> findByUserAndScanStatusAndPurchaseDateBetween(
+            User user,
+            ScanStatus scanStatus,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    );
+
+    List<Ticket> findByScanStatus(ScanStatus scanStatus);
+
+    List<Ticket> findByScanStatusInAndScanStartedAtBefore(
+            List<ScanStatus> scanStatuses,
+            LocalDateTime before
+    );
+
+    /**
+     * Used to know if a photo is still used by another (duplicated) receipt.
+     */
+    long countByImageUrl(String imageUrl);
+
+    /**
+     * Used by account deletion.
+     */
+    void deleteByUser(User user);
 }

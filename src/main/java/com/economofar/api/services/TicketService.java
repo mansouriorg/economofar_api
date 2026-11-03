@@ -6,6 +6,7 @@ import com.economofar.api.dtos.TicketItemRequest;
 import com.economofar.api.dtos.TicketItemResponse;
 import com.economofar.api.dtos.TicketRequest;
 import com.economofar.api.models.ReceiptUsageType;
+import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.TicketItem;
 import com.economofar.api.models.User;
@@ -35,6 +36,7 @@ public class TicketService {
     private final NotificationService notificationService;
     private final BudgetService budgetService;
     private final TicketScanStatusService ticketScanStatusService;
+    private final CategoryBudgetService categoryBudgetService;
 
     /**
      * Saves the validated ticket after the user reviews the OCR result.
@@ -80,16 +82,37 @@ public class TicketService {
             totalAmount = computeItemsTotal(extractedItems);
         }
 
-        Ticket ticket = Ticket.builder()
-                .merchantName(merchantName)
-                .totalAmount(totalAmount)
-                .purchaseDate(parsedDate)
-                .category(cleanNullable(request.getCategory()))
-                .paymentMethod(paymentMethod)
-                .imageUrl(validImageUrl)
-                .rawOcrText(request.getRawOcrText())
-                .user(user)
-                .build();
+        // Finalize the ticket created by /upload (same id, same photo)
+        // instead of creating a second ticket.
+        Ticket existingTicket = request.getTicketId() != null
+                ? repository.findByIdAndUser(request.getTicketId(), user).orElse(null)
+                : null;
+
+        if (existingTicket != null && existingTicket.getScanStatus() == ScanStatus.SAVED) {
+            // Double tap or retry: the ticket is already saved, do not duplicate it
+            return existingTicket;
+        }
+
+        String imageUrlToStore = validImageUrl;
+
+        if (existingTicket != null
+                && (request.getImageUrl() == null || request.getImageUrl().isBlank())
+                && existingTicket.getImageUrl() != null
+                && !existingTicket.getImageUrl().isBlank()) {
+            imageUrlToStore = existingTicket.getImageUrl();
+        }
+
+        Ticket ticket = existingTicket != null
+                ? existingTicket
+                : Ticket.builder().user(user).build();
+
+        ticket.setMerchantName(merchantName);
+        ticket.setTotalAmount(totalAmount);
+        ticket.setPurchaseDate(parsedDate);
+        ticket.setCategory(cleanNullable(request.getCategory()));
+        ticket.setPaymentMethod(paymentMethod);
+        ticket.setImageUrl(imageUrlToStore);
+        ticket.setRawOcrText(request.getRawOcrText());
 
         ticket.setNote(cleanNullable(request.getNote()));
         ticket.setWarrantyDate(parseWarrantyDate(request.getWarrantyDate()));
@@ -101,24 +124,26 @@ public class TicketService {
         ticket.setClientName(cleanNullable(request.getClientName()));
         ticket.setExpenseReportReference(cleanNullable(request.getExpenseReportReference()));
 
-        for (TicketItem item : extractedItems) {
-            ticket.addItem(item);
-        }
+        ticket.replaceItems(extractedItems);
 
         Ticket savedTicket = repository.save(ticket);
 
         savedTicket = ticketScanStatusService.markSaved(savedTicket);
 
-        notificationService.notifyTicketAnalysisCompleted(
-                user,
-                savedTicket.getId(),
-                savedTicket.getMerchantName(),
-                toDouble(savedTicket.getTotalAmount())
-        );
+        if (!ManualTicketService.SOURCE_TEXT.equals(request.getRawOcrText())) {
+            notificationService.notifyTicketAnalysisCompleted(
+                    user,
+                    savedTicket.getId(),
+                    savedTicket.getMerchantName(),
+                    toDouble(savedTicket.getTotalAmount())
+            );
+        }
 
         checkUnusualSpending(user, savedTicket);
 
         budgetService.checkBudgetExceeded(user);
+
+        categoryBudgetService.checkCategoryBudget(user, savedTicket.getCategory());
 
         return savedTicket;
     }
@@ -132,7 +157,7 @@ public class TicketService {
             throw new IllegalArgumentException("Authenticated user is required");
         }
 
-        return repository.findByUserOrderByPurchaseDateDesc(user);
+        return repository.findByUserAndScanStatusOrderByPurchaseDateDesc(user, ScanStatus.SAVED);
     }
 
     /**
@@ -629,5 +654,35 @@ public class TicketService {
         }
 
         return amount.doubleValue();
+    }
+
+    /**
+     * Looks for an already saved receipt with the same merchant, the same amount
+     * and the same day. Used to warn the user before saving a duplicate.
+     */
+    @Transactional(readOnly = true)
+    public Ticket findPossibleDuplicate(
+            User user,
+            String merchantName,
+            BigDecimal amount,
+            String purchaseDate
+    ) {
+        if (user == null || amount == null || merchantName == null || merchantName.isBlank()) {
+            return null;
+        }
+
+        LocalDateTime dayStart = parsePurchaseDate(purchaseDate).toLocalDate().atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1).minusSeconds(1);
+        String wantedMerchant = merchantName.trim();
+
+        return repository
+                .findByUserAndScanStatusAndPurchaseDateBetween(user, ScanStatus.SAVED, dayStart, dayEnd)
+                .stream()
+                .filter(ticket -> ticket.getMerchantName() != null
+                        && ticket.getMerchantName().trim().equalsIgnoreCase(wantedMerchant))
+                .filter(ticket -> ticket.getTotalAmount() != null
+                        && ticket.getTotalAmount().subtract(amount).abs().compareTo(new BigDecimal("0.005")) < 0)
+                .findFirst()
+                .orElse(null);
     }
 }

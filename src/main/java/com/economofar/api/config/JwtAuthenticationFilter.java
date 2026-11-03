@@ -1,5 +1,6 @@
 package com.economofar.api.config;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,6 +10,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -24,55 +26,48 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(
-            HttpServletRequest request,     // ✅ Plus besoin de @NonNull ici
-            HttpServletResponse response,   // ✅ Ni ici
-            FilterChain filterChain         // ✅ Ni là
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
     ) throws ServletException, IOException {
-        
-        // 1. On cherche le header "Authorization" dans la requête de l'iPhone
-        final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
 
-        // Si pas de header ou si ça ne commence pas par "Bearer ", on laisse tomber
+        final String authHeader = request.getHeader("Authorization");
+
+        // No bearer token: continue as anonymous. Protected routes will answer 401.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 2. On extrait le token (on enlève "Bearer " qui fait 7 caractères)
-        jwt = authHeader.substring(7);
-        
-        // 3. On extrait l'email de l'utilisateur caché dans le token
-        userEmail = jwtService.extractUsername(jwt);
+        final String jwt = authHeader.substring(7).trim();
 
-        // 4. Si on a trouvé un email et que l'utilisateur n'est pas encore connecté dans le contexte
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            
-            // On charge les détails de l'utilisateur depuis la base de données
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-            
-            // 5. On vérifie si le token est valide (bon user + pas expiré)
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                
-                // 6. C'est valide ! On crée l'objet d'authentification officiel
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
-                
-                // 7. On met à jour le contexte de sécurité de Spring
-                // À partir de maintenant, Spring sait qui est connecté !
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+        try {
+            final String userEmail = jwtService.extractUsername(jwt);
+
+            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+
+                    authToken.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
+                    );
+
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (JwtException | IllegalArgumentException | UsernameNotFoundException exception) {
+            // Expired, malformed or unknown token:
+            // we do not crash, the request simply stays anonymous and gets a clean 401 if the route is protected.
+            SecurityContextHolder.clearContext();
+            logger.debug("Invalid JWT ignored: " + exception.getMessage());
         }
-        
-        // On passe à la suite de la chaîne (le Controller)
+
         filterChain.doFilter(request, response);
     }
 }

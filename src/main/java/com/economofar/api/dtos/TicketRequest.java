@@ -8,12 +8,20 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class TicketRequest {
+
+    /**
+     * Id of the ticket created by POST /upload.
+     * When present, POST /scan finalizes that ticket (same id, same photo)
+     * instead of creating a second one.
+     */
+    private UUID ticketId;
 
     private String merchantName;
 

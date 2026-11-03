@@ -21,4 +21,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * Utilisé lors de la modification du profil pour éviter les doublons.
      */
     boolean existsByEmail(String email);
+
+    /**
+     * Case-insensitive duplicate check used at registration.
+     */
+    boolean existsByEmailIgnoreCase(String email);
 }

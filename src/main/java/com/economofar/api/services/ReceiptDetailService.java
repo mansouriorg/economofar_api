@@ -30,6 +30,7 @@ import java.util.UUID;
 public class ReceiptDetailService {
 
     private final TicketRepository ticketRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public ReceiptDetailResponse getReceiptDetail(UUID receiptId, User user) {
@@ -127,7 +128,14 @@ public class ReceiptDetailService {
     @Transactional
     public void deleteReceipt(UUID receiptId, User user) {
         Ticket ticket = getTicketForUser(receiptId, user);
+        String imageUrl = ticket.getImageUrl();
+
         ticketRepository.delete(ticket);
+
+        // Remove the photo from disk unless a duplicated receipt still uses it
+        if (imageUrl != null && ticketRepository.countByImageUrl(imageUrl) == 0) {
+            fileStorageService.deleteByUrl(imageUrl);
+        }
     }
 
     @Transactional

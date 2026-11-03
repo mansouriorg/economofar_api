@@ -1,5 +1,6 @@
 package com.economofar.api.services;
 
+import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.repositories.TicketRepository;
@@ -40,8 +41,9 @@ public class NotificationSchedulerService {
         List<User> users = userRepository.findAll();
 
         for (User user : users) {
-            List<Ticket> tickets = ticketRepository.findByUserAndPurchaseDateBetween(
+            List<Ticket> tickets = ticketRepository.findByUserAndScanStatusAndPurchaseDateBetween(
                     user,
+                    ScanStatus.SAVED,
                     startDate,
                     endDate
             );
@@ -84,8 +86,9 @@ public class NotificationSchedulerService {
         List<User> users = userRepository.findAll();
 
         for (User user : users) {
-            List<Ticket> tickets = ticketRepository.findByUserAndPurchaseDateBetween(
+            List<Ticket> tickets = ticketRepository.findByUserAndScanStatusAndPurchaseDateBetween(
                     user,
+                    ScanStatus.SAVED,
                     startDate,
                     endDate
             );

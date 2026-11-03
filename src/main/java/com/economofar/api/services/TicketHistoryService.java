@@ -307,6 +307,14 @@ public class TicketHistoryService {
                                 parsedScanStatus
                         )
                 );
+            } else {
+                // Added by the Economofar upgrade: hide unfinished scans by default
+                predicates.add(
+                        criteriaBuilder.equal(
+                                root.get("scanStatus"),
+                                ScanStatus.SAVED
+                        )
+                );
             }
 
             Predicate intelligentSearchPredicate = buildIntelligentSearchPredicate(

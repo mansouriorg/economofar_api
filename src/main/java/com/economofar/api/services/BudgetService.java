@@ -1,6 +1,7 @@
 package com.economofar.api.services;
 
 import com.economofar.api.dtos.UpdateBudgetRequest;
+import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.models.UserBudget;
@@ -40,7 +41,7 @@ public class BudgetService {
                 .orElseGet(() -> new UserBudget(
                         user,
                         request.getMonthlyAmount(),
-                        request.getCurrency() != null ? request.getCurrency() : "EUR"
+                        request.getCurrency() != null ? request.getCurrency() : user.getPreferredCurrency()
                 ));
 
         budget.setMonthlyAmount(request.getMonthlyAmount());
@@ -70,8 +71,9 @@ public class BudgetService {
 
         LocalDateTime endDate = startDate.plusMonths(1);
 
-        List<Ticket> monthlyTickets = ticketRepository.findByUserAndPurchaseDateBetween(
+        List<Ticket> monthlyTickets = ticketRepository.findByUserAndScanStatusAndPurchaseDateBetween(
                 user,
+                ScanStatus.SAVED,
                 startDate,
                 endDate
         );

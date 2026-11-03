@@ -12,4 +12,6 @@ import java.util.UUID;
 public interface SupportRequestRepository extends JpaRepository<SupportRequest, UUID> {
 
     List<SupportRequest> findTop50ByUserOrderByCreatedAtDesc(User user);
+
+    void deleteByUser(User user);
 }

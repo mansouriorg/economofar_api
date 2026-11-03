@@ -32,3 +32,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Added by the Economofar upgrade
+.upgrade-backup/
+
+# Added by the Economofar upgrade
+uploads/
+.DS_Store
+
+.upgrade-backup/

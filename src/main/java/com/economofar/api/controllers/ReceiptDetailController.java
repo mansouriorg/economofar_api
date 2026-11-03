@@ -23,7 +23,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/receipts")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class ReceiptDetailController {
 
     private final ReceiptDetailService receiptDetailService;

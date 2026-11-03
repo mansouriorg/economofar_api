@@ -5,58 +5,110 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
+import java.security.SecureRandom;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * JWT helper.
+ *
+ * The signing secret is NOT stored in the source code anymore.
+ * It is read from the JWT_SECRET property / environment variable
+ * (for example from the .env file of this project).
+ *
+ * JWT_SECRET must be a Base64 string of at least 32 bytes.
+ * Example to generate one:  openssl rand -base64 48
+ *
+ * JWT_EXPIRATION_HOURS (optional) controls how long a token stays valid.
+ * Default: 168 hours (7 days).
+ */
 @Service
 public class JwtService {
 
-    // 🔐 Clé Secrète de chiffrement (Générée aléatoirement, 256 bits)
-    // IMPORTANT : En production, mettez ça dans application.properties !
-    private static final String SECRET_KEY = "REMOVED_OLD_TUTORIAL_KEY";
+    private static final Logger log = LoggerFactory.getLogger(JwtService.class);
+
+    private final Key signInKey;
+    private final long expirationMillis;
+
+    public JwtService(
+            @Value("${JWT_SECRET:}") String configuredSecret,
+            @Value("${JWT_EXPIRATION_HOURS:168}") long expirationHours
+    ) {
+        this.expirationMillis = Math.max(1L, expirationHours) * 60L * 60L * 1000L;
+        this.signInKey = buildKey(configuredSecret);
+    }
+
+    private Key buildKey(String configuredSecret) {
+        if (configuredSecret != null && !configuredSecret.isBlank()) {
+            try {
+                byte[] keyBytes = Decoders.BASE64.decode(configuredSecret.trim());
+
+                if (keyBytes.length >= 32) {
+                    return Keys.hmacShaKeyFor(keyBytes);
+                }
+
+                log.warn("JWT_SECRET is too short (minimum 32 bytes once decoded). A temporary key is used instead.");
+            } catch (RuntimeException exception) {
+                log.warn("JWT_SECRET is not valid Base64. A temporary key is used instead.");
+            }
+        } else {
+            log.warn("JWT_SECRET is not configured. A temporary key is used: every login is lost when the server restarts.");
+        }
+
+        byte[] randomKey = new byte[64];
+        new SecureRandom().nextBytes(randomKey);
+        return Keys.hmacShaKeyFor(randomKey);
+    }
 
     /**
-     * Extrait le "username" (l'email) du token
+     * Extracts the username (the email) from the token.
      */
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
     /**
-     * Génère un token pour un utilisateur (sans claims extra)
+     * Generates a token for a user (without extra claims).
      */
     public String generateToken(UserDetails userDetails) {
         return generateToken(new HashMap<>(), userDetails);
     }
 
     /**
-     * Génère un token avec des infos supplémentaires (extraClaims)
+     * Generates a token with extra claims.
      */
     public String generateToken(
             Map<String, Object> extraClaims,
             UserDetails userDetails
     ) {
+        long now = System.currentTimeMillis();
+
         return Jwts.builder()
-                .setClaims(extraClaims)
-                .setSubject(userDetails.getUsername()) // L'email de l'user
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24)) // Expire dans 24 heures
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256) // Signature cryptographique
+                .setClaims(new HashMap<>(extraClaims))
+                .setSubject(userDetails.getUsername())
+                .setIssuedAt(new Date(now))
+                .setExpiration(new Date(now + expirationMillis))
+                .signWith(signInKey, SignatureAlgorithm.HS256)
                 .compact();
     }
 
     /**
-     * Vérifie si le token est valide (bon user + pas expiré)
+     * Checks that the token belongs to this user and is not expired.
      */
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+        return username != null
+                && username.equals(userDetails.getUsername())
+                && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {
@@ -75,14 +127,9 @@ public class JwtService {
     private Claims extractAllClaims(String token) {
         return Jwts
                 .parserBuilder()
-                .setSigningKey(getSignInKey())
+                .setSigningKey(signInKey)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
-    }
-
-    private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
-        return Keys.hmacShaKeyFor(keyBytes);
     }
 }

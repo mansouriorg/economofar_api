@@ -147,9 +147,26 @@ public class NotificationService {
             Double currentTotal,
             Double budgetAmount
     ) {
+        LocalDateTime startOfMonth = LocalDateTime.now()
+                .withDayOfMonth(1)
+                .withHour(0)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0);
+
+        // Only one "budget exceeded" alert per month (not one per saved ticket)
+        if (notificationRepository.existsByUserAndTypeAndTitleAndCreatedAtAfter(
+                user,
+                NotificationType.BUDGET_EXCEEDED,
+                "Budget dépassé",
+                startOfMonth
+        )) {
+            return;
+        }
+
         String body = "Votre budget mensuel de "
                 + formatAmount(budgetAmount)
-                + " € est dépassé.";
+                + " " + currencySymbol(user) + " est dépassé.";
 
         String metadata = "{"
                 + "\"currentTotal\":" + jsonNumber(currentTotal) + ","
@@ -173,7 +190,7 @@ public class NotificationService {
     ) {
         String body = "Une dépense de "
                 + formatAmount(amount)
-                + " € semble supérieure à votre moyenne habituelle.";
+                + " " + currencySymbol(user) + " semble supérieure à votre moyenne habituelle.";
 
         String metadata = "{"
                 + "\"ticketId\":\"" + ticketId + "\","
@@ -203,7 +220,7 @@ public class NotificationService {
                 + (safeTicketCount > 1 ? "s" : "")
                 + " pour "
                 + formatAmount(totalAmount)
-                + " €.";
+                + " " + currencySymbol(user) + ".";
 
         String metadata = "{"
                 + "\"totalAmount\":" + jsonNumber(totalAmount) + ","
@@ -228,7 +245,7 @@ public class NotificationService {
 
         String body = "Votre total du mois est de "
                 + formatAmount(totalAmount)
-                + " € pour "
+                + " " + currencySymbol(user) + " pour "
                 + safeTicketCount
                 + " ticket"
                 + (safeTicketCount > 1 ? "s" : "")
@@ -243,6 +260,54 @@ public class NotificationService {
                 user,
                 NotificationType.MONTHLY_SPENDING_SUMMARY,
                 "Résumé mensuel",
+                body,
+                metadata
+        );
+    }
+
+    public void notifyCategoryBudgetExceeded(
+            User user,
+            String category,
+            Double spent,
+            Double budgetAmount
+    ) {
+        LocalDateTime startOfMonth = LocalDateTime.now()
+                .withDayOfMonth(1)
+                .withHour(0)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0);
+
+        String title = "Budget dépassé : " + category;
+
+        // Only one alert per category and per month
+        if (notificationRepository.existsByUserAndTypeAndTitleAndCreatedAtAfter(
+                user,
+                NotificationType.BUDGET_EXCEEDED,
+                title,
+                startOfMonth
+        )) {
+            return;
+        }
+
+        String symbol = currencySymbol(user);
+
+        String body = "Votre budget " + category + " de "
+                + formatAmount(budgetAmount)
+                + " " + symbol + " est dépassé : "
+                + formatAmount(spent)
+                + " " + symbol + " dépensés ce mois-ci.";
+
+        String metadata = "{"
+                + "\"category\":\"" + safeJson(category) + "\","
+                + "\"currentTotal\":" + jsonNumber(spent) + ","
+                + "\"budgetAmount\":" + jsonNumber(budgetAmount)
+                + "}";
+
+        createNotificationIfEnabled(
+                user,
+                NotificationType.BUDGET_EXCEEDED,
+                title,
                 body,
                 metadata
         );
@@ -268,6 +333,22 @@ public class NotificationService {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private String currencySymbol(User user) {
+        String code = user != null ? user.getPreferredCurrency() : null;
+
+        if (code == null || code.isBlank()) {
+            return "€";
+        }
+
+        String cleanCode = code.trim().toUpperCase(java.util.Locale.ROOT);
+
+        try {
+            return java.util.Currency.getInstance(cleanCode).getSymbol(java.util.Locale.FRANCE);
+        } catch (IllegalArgumentException exception) {
+            return cleanCode;
+        }
     }
 
     private String jsonNumber(Double value) {

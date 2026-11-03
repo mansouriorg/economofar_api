@@ -2,6 +2,7 @@ package com.economofar.api.services;
 
 import com.economofar.api.dtos.DashboardInsightsResponse;
 import com.economofar.api.dtos.DashboardRecentTicketResponse;
+import com.economofar.api.models.ScanStatus;
 import com.economofar.api.models.Ticket;
 import com.economofar.api.models.User;
 import com.economofar.api.models.UserBudget;
@@ -52,29 +53,29 @@ public class DashboardInsightService {
         LocalDateTime startOfLastMonth = startOfThisMonth.minusMonths(1);
         LocalDateTime endOfLastMonth = startOfThisMonth;
 
-        List<Ticket> allTickets = ticketRepository.findByUserOrderByPurchaseDateDesc(user);
+        List<Ticket> allTickets = ticketRepository.findByUserAndScanStatusOrderByPurchaseDateDesc(user, ScanStatus.SAVED);
 
-        List<Ticket> weekTickets = ticketRepository.findByUserAndPurchaseDateBetween(
+        List<Ticket> weekTickets = findSavedTicketsBetween(
                 user,
                 startOfWeek,
                 now
         );
 
-        List<Ticket> thisMonthTickets = ticketRepository.findByUserAndPurchaseDateBetween(
+        List<Ticket> thisMonthTickets = findSavedTicketsBetween(
                 user,
                 startOfThisMonth,
                 startOfNextMonth
         );
 
-        List<Ticket> lastMonthTickets = ticketRepository.findByUserAndPurchaseDateBetween(
+        List<Ticket> lastMonthTickets = findSavedTicketsBetween(
                 user,
                 startOfLastMonth,
                 endOfLastMonth
         );
 
-        List<Ticket> recentTickets = ticketRepository.findTop5ByUserOrderByPurchaseDateDesc(user);
+        List<Ticket> recentTickets = ticketRepository.findTop5ByUserAndScanStatusOrderByPurchaseDateDesc(user, ScanStatus.SAVED);
 
-        Ticket lastTicket = ticketRepository.findTopByUserOrderByPurchaseDateDesc(user);
+        Ticket lastTicket = ticketRepository.findTopByUserAndScanStatusOrderByPurchaseDateDesc(user, ScanStatus.SAVED);
 
         BigDecimal totalScannedAmount = calculateTotal(allTickets);
         long ticketCount = allTickets.size();
@@ -134,6 +135,19 @@ public class DashboardInsightService {
                 lastScanSmartCard.amount(),
                 lastScanSmartCard.date(),
                 recentTicketResponses
+        );
+    }
+
+    private List<Ticket> findSavedTicketsBetween(
+            User user,
+            LocalDateTime start,
+            LocalDateTime end
+    ) {
+        return ticketRepository.findByUserAndScanStatusAndPurchaseDateBetween(
+                user,
+                ScanStatus.SAVED,
+                start,
+                end
         );
     }
 

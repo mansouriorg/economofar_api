@@ -1,6 +1,7 @@
 package com.economofar.api.controllers;
 
 import com.economofar.api.services.FileStorageService;
+import com.economofar.api.services.UploadGuard;
 import com.economofar.api.services.OllamaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class ImageController {
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadImage(@RequestParam("file") MultipartFile file) {
         // 1. Sauvegarder le fichier sur le disque (pour avoir une URL accessible)
+        UploadGuard.requireImage(file);
         String fileName = fileStorageService.storeFile(file);
 
         // 2. Créer l'URL publique (ex: http://localhost:8080/uploads/ticket.jpg)

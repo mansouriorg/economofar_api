@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16
+    container_name: economofar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: economofar
+      POSTGRES_USER: economofar
+      POSTGRES_PASSWORD: economofar
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - economofar-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U economofar -d economofar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    image: economofar-api
+    container_name: economofar-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/economofar
+      SPRING_DATASOURCE_USERNAME: economofar
+      SPRING_DATASOURCE_PASSWORD: economofar
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_PROFILES_ACTIVE: ${ECONOMOFAR_PROFILE:-demo}
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-168}
+      OLLAMA_URL: ${OLLAMA_URL_IN_DOCKER:-http://host.docker.internal:11434/api/generate}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-minicpm-v}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-180}
+      TZ: ${ECONOMOFAR_TIMEZONE:-UTC}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    volumes:
+      - economofar-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  economofar-db-data:
+  economofar-uploads:
